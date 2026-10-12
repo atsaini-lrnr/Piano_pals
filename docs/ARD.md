@@ -1,0 +1,75 @@
+# Piano Pals — Architecture & Decision Record
+
+_Living document. Each decision lists the context and the alternatives rejected._
+
+## 1. Module map
+```
+PianoPals/
+  App/          PianoPalsApp, AppModel (wiring)
+  Core/         Models (Note, Lesson, Finger), PianoGeometry, HostClock, Locked
+  Lesson/       FingeringEngine, RawMusicParsers (note text + .mid), SongLibrary,
+                AILessonGeneratorService (+ transports, local fallback), LessonSession (engine)
+  MIDI/         MIDIParser (pure), MIDIManager (CoreMIDI)
+  Camera/       CameraDevices, CameraChannel (1 AVCaptureSession each), CameraHub, CameraPreviewView
+  Vision/       HandModels, HandPoseProcessor, FaceExpression, KeyboardRegion, FingerAttribution
+  Calibration/  HandTemplate (+matcher), CalibrationFlow, CalibrationStore
+  Audio/        ToneSynth, Narrator
+  Views/        Child UI (home, songs, lesson, calibration), grown-ups panel
+PianoPalsTests/ unit tests (engine, MIDI, vision geometry, session, calibration)
+```
+
+## 2. Data flow (key strike)
+```
+USB MIDI keyboard ─► MIDIManager ─ NoteEvent(hostTime) ─┐
+On-screen key ─────► MIDIManager.injectOnScreen ────────┤
+                                                        ▼
+Camera ─► CameraChannel ─► HandPoseProcessor ─► HandFrameHistory (ring buffer, host-time stamped)
+                                                        │ wait ≤120 ms for a frame at/after the strike
+                                                        ▼
+                                  FingerAttributor(note, frame, KeyboardRegion) ─► DetectedFinger?
+                                                        ▼
+                                        LessonSession.handleNoteOn ─► SessionEvent
+                                                        ▼
+                         Avatar mood · Confetti · Key pulse · Narrator · progress/stars
+```
+
+## 3. Decisions
+**D1 — Custom camera picker instead of `AVContinuityDevicePickerViewController`.** The header is under `TARGET_OS_TV` in the iOS 27 SDK; it does not exist on iPadOS. iPadOS surfaces a nearby iPhone through `AVCaptureDevice.DiscoverySession` (`.continuityCamera`). We list devices live and let the grown-up assign them. *Rejected:* UIKit wrapper (not available).
+
+**D2 — `.external` / `.continuityCamera`, not `.externalUnknown`.** `.externalUnknown` is macOS-only (unavailable on iOS).
+
+**D3 — One `AVCaptureSession` per channel, not `AVCaptureMultiCamSession`.** Multi-cam cannot include a Continuity/external camera. Consequence: only **one built-in iPad camera** can run at once; the second channel is the iPhone/external camera. The hub enforces this.
+
+**D4 — Upright buffers, then Vision with `.up`.** The capture connection rotates/mirrors pixels (via `AVCaptureDevice.RotationCoordinator` + manual offset), so Vision output is already in display space and overlay math is linear. Handedness is swapped back when the picture is mirrored. Camera tiles are sized to the video aspect ratio so no crop distorts the overlay.
+
+**D5 — Vision per channel on that channel's serial queue with late-frame discarding.** Natural back-pressure; two cameras process concurrently; UI publishes at ≤30 Hz.
+
+**D6 — Shared host clock.** MIDI packet timestamps, `CACurrentMediaTime`, and `CMSampleBuffer` PTS share the mach host clock, so a strike can be matched to the nearest video frame. Attribution waits up to ~120 ms for the frame to arrive (processing latency).
+
+**D7 — Keyboard mapping is a 1-D linear fit (`KeyboardRegion`).** Calibration (right-hand C position, left-hand C position) gives ≥10 fingertip↔key pairs; least squares yields white-keys-per-image-width and offset. Sign of the slope handles reversed cameras. Chosen over homography because depth/perspective from a single camera is unreliable and tolerance is ±1 key. Sanity checks reject nonsense fits.
+
+**D8 — Lenient judging.** If the camera can't confidently see a finger, the note still counts (`fingerUnverified`). A wrong finger on the right key advances with a softer reaction and a hint. Wrong keys never subtract anything. Rationale: 5-year-olds; vision error would otherwise feel like the app is wrong.
+
+**D9 — "Wait for me" pacing by default.** The clock stops at the next unplayed note; "Play along" is available for older/faster players. Falling-note drawing reads `songTime(at:)` per frame instead of publishing a clock, so SwiftUI isn't invalidated 60×/s.
+
+**D10 — Fingering by Viterbi search.** Costs encode one-finger-per-key position play, direction, stretch, thumb-on-black, leaps. Unit tests lock in textbook results (C–G scale 1-2-3-4-5, Ode to Joy 3-3-4-5-5-4-3-2-1-1-2-3-3-2-2).
+
+**D11 — Cloud pipeline behind a transport protocol.** `LessonTransport` is mockable; the service validates and times out; every failure routes to the on-device engine. Unknown songs become clearly-labelled *practice tunes* (never pretends to be the real song).
+
+**D12 — Face expression via Vision landmarks, not ARKit.** `ARFaceTrackingConfiguration` takes exclusive use of the TrueDepth camera and would block the front-camera video/hand tracking. Landmark-based smile score is coarse but sufficient for avatar mirroring.
+
+**D13 — Swift 5 language mode, iOS 17 deployment target.** Avoids Swift 6 strict-concurrency friction with AVFoundation/CoreMIDI callbacks; shared mutable state is wrapped in `Locked`. Revisit once on a Swift 6 migration.
+
+**D14 — Project uses Xcode synchronized folders (objectVersion 77).** New Swift files are picked up automatically; no per-file project edits.
+
+## 4. Risks
+| Risk | Mitigation | Status |
+|---|---|---|
+| Vision hand pose weak on small child hands / overhead angle | Generous template tolerance; lenient judging; manual rotate/flip | needs device test |
+| Continuity Camera availability on iPad (OS, Wi-Fi/BT, same Apple ID, iPhone orientation) | Live-refreshing picker with troubleshooting text | needs device test |
+| Camera latency vs. MIDI | Host-clock matching + 120 ms wait | needs device test |
+| Two cameras + Vision thermal load | 30/60 fps preference, late-frame dropping | needs device test |
+| No real AI backend | Mock + fallback; transport ready | open |
+
+## 5. Change log
+* 2026-10-13 — Engine layers, tests, PRD/ARD created. UI layer in progress.
