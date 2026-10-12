@@ -1,0 +1,242 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// Everything a parent needs: add songs, choose cameras, check the piano connection, tweak behaviour.
+struct GrownUpsView: View {
+    @EnvironmentObject private var app: AppModel
+
+    var body: some View {
+        GrownUpsContent(app: app, midi: app.midi, cameras: app.cameras, settings: app.settings)
+    }
+}
+
+private struct GrownUpsContent: View {
+    let app: AppModel
+    @ObservedObject var midi: MIDIManager
+    @ObservedObject var cameras: CameraHub
+    @ObservedObject var settings: AppSettings
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var songText = ""
+    @State private var importing = false
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                songSection
+                cameraSection
+                pianoSection
+                playSection
+                calibrationSection
+                funSection
+                diagnosticsSection
+            }
+            .navigationTitle("Grown-ups")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.midi]) { result in
+                if case .success(let url) = result { app.importMIDIFile(at: url) }
+            }
+        }
+    }
+
+    // MARK: Songs
+
+    private var songSection: some View {
+        Section {
+            TextField("YouTube link, music-share text, or “Title – Composer”", text: $songText, axis: .vertical)
+                .lineLimit(1...4)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($fieldFocused)
+                .submitLabel(.go)
+                .onSubmit(generate)
+            Picker("Hand", selection: $settings.lessonHand) {
+                ForEach(HandSide.allCases) { Text($0.displayName).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            HStack {
+                Button(action: generate) {
+                    if app.generation == .working { ProgressView().padding(.trailing, 6) }
+                    Text(app.generation == .working ? "Making your song…" : "Make a lesson")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(songText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || app.generation == .working)
+                Spacer()
+                Button("Import MIDI file…") { importing = true }.buttonStyle(.bordered)
+            }
+            switch app.generation {
+            case .done(let message, let usedFallback):
+                Label(message, systemImage: usedFallback ? "ipad" : "checkmark.circle.fill")
+                    .foregroundStyle(usedFallback ? Color.orange : Color.green)
+            case .failed(let message):
+                Label(message, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+            default:
+                EmptyView()
+            }
+        } header: {
+            Text("Add a song")
+        } footer: {
+            Text("Try: “Ode to Joy by Beethoven”, a YouTube link, or notes like “C4 D4 E4 F4 G4 F4 E4 D4 C4:2”. Songs the lesson service doesn't know become a short practice tune made on this iPad.")
+        }
+    }
+
+    private func generate() {
+        let text = songText
+        fieldFocused = false
+        Task {
+            await app.generateLesson(from: text)
+            if case .done = app.generation { songText = "" }
+        }
+    }
+
+    // MARK: Cameras
+
+    private var cameraSection: some View {
+        Section {
+            ForEach(CameraChannelID.allCases) { id in
+                CameraChannelRow(channel: cameras.channel(id), id: id)
+            }
+            Button("Choose cameras (including your iPhone)…") { app.showCameraPicker = true }
+            Picker("Layout", selection: $cameras.layout) {
+                ForEach(CameraLayout.allCases) { Text($0.displayName).tag($0) }
+            }
+            Picker("Hands are tracked on", selection: $cameras.trackingPreference) {
+                ForEach(TrackingPreference.allCases) { Text($0.displayName).tag($0) }
+            }
+            Picker("Camera speed", selection: Binding(get: { cameras.preferredFPS }, set: { cameras.preferredFPS = $0; cameras.restartChannels() })) {
+                Text("30 fps").tag(30.0)
+                Text("60 fps (smoothest)").tag(60.0)
+            }
+        } header: { Text("Cameras") }
+    }
+
+    // MARK: Piano
+
+    private var pianoSection: some View {
+        Section {
+            HStack {
+                Image(systemName: midi.isKeyboardConnected ? "checkmark.circle.fill" : "exclamationmark.circle")
+                    .foregroundStyle(midi.isKeyboardConnected ? Color.green : Color.orange)
+                VStack(alignment: .leading) {
+                    Text(midi.isKeyboardConnected ? "Keyboard connected" : "No keyboard found").font(.headline)
+                    if midi.sources.isEmpty {
+                        Text("Plug the keyboard into the iPad's USB-C port and switch it on.").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    ForEach(midi.sources) { Text($0.name).font(.subheadline).foregroundStyle(.secondary) }
+                }
+            }
+            if case .failed(let message) = midi.status { Text(message).foregroundStyle(.red) }
+            Picker("Keyboard size", selection: $settings.keyboardPreset) {
+                ForEach(KeyboardPreset.allCases) { Text($0.displayName).tag($0) }
+            }
+            Toggle("Play sound for on-screen keys", isOn: $settings.onScreenSound)
+            Toggle("Play sound for the real keyboard", isOn: $settings.hardwareSound)
+        } header: { Text("Piano") } footer: {
+            Text("Leave “real keyboard” sound off if your keyboard has its own speakers. Changing the keyboard size means the hands need calibrating again.")
+        }
+    }
+
+    // MARK: Play
+
+    private var playSection: some View {
+        Section {
+            Picker("How the song moves", selection: $settings.paceMode) {
+                ForEach(PaceMode.allCases) { Text($0.displayName).tag($0) }
+            }
+            VStack(alignment: .leading) {
+                Text("Speed: \(Int(settings.tempoScale * 100))%")
+                Slider(value: $settings.tempoScale, in: 0.4...1.2, step: 0.05)
+            }
+        } header: { Text("Playing") } footer: {
+            Text("“Wait for me” pauses the song until the right key is played — best for beginners.")
+        }
+    }
+
+    // MARK: Calibration
+
+    private var calibrationSection: some View {
+        Section {
+            ForEach(CameraChannelID.allCases) { id in
+                HStack {
+                    Label(id.displayName, systemImage: app.isCalibrated(id) ? "checkmark.seal.fill" : "seal")
+                        .foregroundStyle(app.isCalibrated(id) ? Color.green : Color.secondary)
+                    Spacer()
+                    if app.isCalibrated(id) { Button("Reset") { app.resetCalibration(for: id) }.buttonStyle(.bordered) }
+                }
+            }
+            Button("Calibrate hands now") {
+                dismiss()
+                app.screen = .calibration
+            }
+        } header: { Text("Hand calibration") } footer: {
+            Text("Hands are calibrated for whichever camera tracks them. Calibrate again whenever the camera or keyboard moves.")
+        }
+    }
+
+    // MARK: Fun
+
+    private var funSection: some View {
+        Section {
+            Toggle("Spoken helper", isOn: $settings.narrationEnabled)
+            Toggle("Panda copies your child's smile", isOn: $settings.mirrorSmile)
+        } header: { Text("Voice and fun") } footer: {
+            Text("Smiles are read from the front camera on the iPad and never saved or sent anywhere.")
+        }
+    }
+
+    // MARK: Diagnostics
+
+    private var diagnosticsSection: some View {
+        Section {
+            ForEach(CameraChannelID.allCases) { id in
+                DiagnosticRow(channel: cameras.channel(id), id: id)
+            }
+            LabeledContent("MIDI notes received", value: "\(midi.eventCount)")
+            Toggle("Demo hands (no camera needed)", isOn: $settings.demoHands)
+            if settings.demoHands { Toggle("Demo hand uses the wrong finger", isOn: $settings.demoWrongFinger) }
+        } header: { Text("Diagnostics") } footer: {
+            Text("Demo hands draws pretend hands so you can try the screens without a camera, for example in the Simulator.")
+        }
+    }
+}
+
+private struct CameraChannelRow: View {
+    @ObservedObject var channel: CameraChannel
+    let id: CameraChannelID
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: channel.deviceInfo?.symbolName ?? "video.slash").frame(width: 30)
+                VStack(alignment: .leading) {
+                    Text(id.displayName).font(.headline)
+                    Text(channel.deviceInfo?.name ?? "No camera").font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            if channel.deviceInfo != nil {
+                HStack {
+                    Stepper("Turn picture \(channel.manualRotation)°", value: Binding(get: { channel.manualRotation / 90 }, set: { channel.manualRotation = (($0 % 4) + 4) % 4 * 90 }), in: -100...100)
+                    Toggle("Flip", isOn: $channel.flipHorizontally).fixedSize()
+                }
+            }
+        }
+    }
+}
+
+private struct DiagnosticRow: View {
+    @ObservedObject var channel: CameraChannel
+    let id: CameraChannelID
+
+    var body: some View {
+        LabeledContent(id.displayName) {
+            if channel.state == .running {
+                Text(String(format: "%.0f fps · %d hand%@", channel.framesPerSecond, channel.latestFrame?.hands.count ?? 0,
+                            (channel.latestFrame?.hands.count ?? 0) == 1 ? "" : "s"))
+            } else {
+                Text(String(describing: channel.state))
+            }
+        }
+    }
+}
