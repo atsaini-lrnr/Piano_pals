@@ -281,7 +281,7 @@ final class AppModel: ObservableObject {
 #if DEBUG
 extension AppModel {
     /// Test hooks, only in Debug builds: `-debugScreen songs|lesson|calibration`, `-debugSong <library id>`, `-debugAutostart YES`,
-    /// `-debugGrownUps YES`, `-debugCameraPicker YES`.
+    /// `-debugGrownUps YES`, `-debugCameraPicker YES`, `-debugPlay "60 61 61 60"` (+ `-debugPlayInterval 1.2`).
     func applyDebugLaunchOptions() {
         let defaults = UserDefaults.standard
         if let id = defaults.string(forKey: "debugSong"), let song = songs.first(where: { $0.title.lowercased().contains(id.lowercased()) }) {
@@ -295,6 +295,19 @@ extension AppModel {
             screen = .lesson
             if defaults.bool(forKey: "debugAutostart") { startLesson() }
         default: break
+        }
+        if let script = defaults.string(forKey: "debugPlay") {
+            let notes = script.split(separator: " ").compactMap { Int($0) }
+            let interval = defaults.double(forKey: "debugPlayInterval")
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                for note in notes {
+                    virtualKey(note, isDown: true)
+                    try? await Task.sleep(for: .milliseconds(120))
+                    virtualKey(note, isDown: false)
+                    try? await Task.sleep(for: .seconds(interval == 0 ? 1.2 : interval))
+                }
+            }
         }
         if defaults.bool(forKey: "debugGrownUps") { showGrownUps = true }
         if defaults.bool(forKey: "debugCameraPicker") { showCameraPicker = true }

@@ -116,7 +116,7 @@ final class MIDIManager: ObservableObject {
         if updated != sources { sources = updated }
         if !removed.isEmpty {
             // A keyboard that was unplugged mid-note would otherwise leave keys "stuck" down.
-            pressedNotes = pressedNotes.filter { _ in false }
+            pressedNotes = []
         }
     }
 

@@ -42,7 +42,7 @@ private struct CalibrationContent: View {
                     CameraTile(channel: channel, title: app.cameras.trackingChannel == .overhead ? "Top view" : "Side view",
                                isTracking: true,
                                demoBackdrop: settings.demoHands && channel.state != .running)
-                    TemplateOverlay(step: flow.currentStep, aligned: flow.isAligned, handSeen: flow.handSeen, progress: flow.progress)
+                    TemplateOverlay(step: flow.outcome == nil ? flow.currentStep : nil, aligned: flow.isAligned, handSeen: flow.handSeen, progress: flow.progress)
                     if let outcome = flow.outcome { outcomeCard(outcome) }
                 }
                 .frame(maxHeight: .infinity)

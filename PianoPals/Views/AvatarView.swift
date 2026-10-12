@@ -154,7 +154,7 @@ struct AvatarView: View {
 
         private func arm(side: CGFloat, w: CGFloat) -> some View {
             Capsule().fill(Palette.ink).frame(width: w * 0.13, height: w * 0.26)
-                .rotationEffect(.degrees(Double(side) * (mood == .cheering ? 150 + wave * 22 : 18)), anchor: .top)
+                .rotationEffect(.degrees(Double(side) * (mood == .cheering ? 135 + wave * 20 : 18)), anchor: .top)
                 .offset(y: mood == .cheering ? -w * 0.10 : 0)
         }
 
