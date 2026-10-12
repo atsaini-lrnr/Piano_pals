@@ -72,4 +72,14 @@ Camera ─► CameraChannel ─► HandPoseProcessor ─► HandFrameHistory (ri
 | No real AI backend | Mock + fallback; transport ready | open |
 
 ## 5. Change log
-* 2026-10-13 — Engine layers, tests, PRD/ARD created. UI layer in progress.
+* 2026-10-13 — Engine layers, tests, PRD/ARD created.
+* 2026-10-13 — Child-friendly UI built; verified in iPad simulator (home, songs, lesson, calibration with demo hands, grown-ups, finish card). 94 unit + 7 UI tests green. Bugs found and fixed through testing: tempo/mode change re-anchored with the *new* value (notes jumped); fingering allowed different fingers on a repeated note; Simulator showed a spurious "camera failed" state; calibration hand-print rendered as a blob.
+* Added Debug-only launch arguments (`-debugScreen`, `-debugSong`, `-debugAutostart`, `-debugPlay`, `-demoHands`) for deterministic screenshots/tests. They compile out of Release.
+
+## 6. Verification status
+| Area | Verified how | Result |
+|---|---|---|
+| Fingering, parsers, service/fallback, session, calibration math, MIDI parsing, keyboard fit, attribution, face heuristic | 94 unit tests | pass |
+| Navigation, key taps, song completion, wrong-key tolerance, pause/resume, calibration (demo), gate, lesson generation | 7 XCUITests, real touches, iPad Pro 13" (M4) simulator | pass |
+| Visuals | Simulator screenshots | reviewed |
+| Live camera, Vision on real hands, Continuity Camera, two cameras at once, USB MIDI, audio, speech | **not possible in Simulator** | pending device test (`docs/TEST_PLAN.md`) |
