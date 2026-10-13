@@ -473,6 +473,9 @@ extension AppModel {
                 }
             }
         }
+        if let query = defaults.string(forKey: "debugQuery") {
+            Task { @MainActor in await generateLesson(from: query) }
+        }
         if defaults.bool(forKey: "debugGrownUps") { showGrownUps = true }
         if defaults.bool(forKey: "debugCameraPicker") { showCameraPicker = true }
     }

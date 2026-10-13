@@ -286,9 +286,75 @@ final class ClassifierAndServiceTests: XCTestCase {
         }
     }
 
+    private struct StubCleaner: TitleCleaning {
+        var answer: String?
+        var delay: Duration = .zero
+        func cleanedTitle(from raw: String) async -> String? {
+            try? await Task.sleep(for: delay)
+            return answer
+        }
+    }
+
     private func service(transport: LessonTransport? = nil, fetcher: VideoTitleFetching = StubFetcher(result: .failure(URLError(.notConnectedToInternet))),
-                         timeout: Duration = .seconds(2)) -> AILessonGeneratorService {
-        AILessonGeneratorService(transport: transport, library: SongLibrary.all, titleFetcher: fetcher, titleCleaner: nil, timeout: timeout)
+                         timeout: Duration = .seconds(2), cleaner: TitleCleaning? = nil, cleanerTimeout: Duration = .seconds(3)) -> AILessonGeneratorService {
+        AILessonGeneratorService(transport: transport, library: SongLibrary.all, titleFetcher: fetcher, titleCleaner: cleaner,
+                                 cleanerTimeout: cleanerTimeout, timeout: timeout)
+    }
+
+    func testTheOnDeviceModelIsOnlyUsedWhenRulesFail() async throws {
+        // Rules know this one: the (wrong) cleaner answer must never be consulted.
+        let outcome = try await service(cleaner: StubCleaner(answer: "Hot Cross Buns")).generateLesson(from: "Ode to Joy")
+        guard case .lesson(let lesson, _) = outcome else { return XCTFail() }
+        XCTAssertEqual(lesson.title, "Ode to Joy")
+        // Rules can't read this, the model can.
+        let messy = try await service(cleaner: StubCleaner(answer: "Ode to Joy")).generateLesson(from: "Fröhliche Melodie Nr 9 finale")
+        guard case .lesson(let found, _) = messy else { return XCTFail("the model's cleaned title should be matched") }
+        XCTAssertEqual(found.title, "Ode to Joy")
+    }
+
+    /// An operation that ignores cancellation, like a system model call that can't be interrupted.
+    private struct UncancellableCleaner: TitleCleaning {
+        func cleanedTitle(from raw: String) async -> String? {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5) { continuation.resume(returning: "Ode to Joy") }
+            }
+        }
+    }
+
+    func testTimeoutReturnsEvenWhenTheOperationIgnoresCancellation() async throws {
+        let start = Date()
+        let outcome = try await service(cleaner: UncancellableCleaner(), cleanerTimeout: .milliseconds(200)).generateLesson(from: "Fröhliche Melodie Nr 9 finale")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, "must not wait for a model call that can't be cancelled")
+        guard case .notFound = outcome else { return XCTFail("the late answer is discarded") }
+    }
+
+    func testWithTimeoutBasics() async throws {
+        let quick: Int = try await withTimeout(.seconds(2)) { 42 }
+        XCTAssertEqual(quick, 42)
+        do {
+            let _: Int = try await withTimeout(.milliseconds(50)) { try await Task.sleep(for: .seconds(10)); return 1 }
+            XCTFail("should time out")
+        } catch {
+            XCTAssertEqual(error as? LessonServiceError, .timedOut)
+        }
+        do {
+            let _: Int = try await withTimeout(.seconds(2)) { throw LessonServiceError.notFound }
+            XCTFail("should rethrow")
+        } catch {
+            XCTAssertEqual(error as? LessonServiceError, .notFound)
+        }
+    }
+
+    func testASlowOnDeviceModelNeverBlocksTheLesson() async throws {
+        let start = Date()
+        let outcome = try await service(cleaner: StubCleaner(answer: "Ode to Joy", delay: .seconds(30)), cleanerTimeout: .milliseconds(100))
+            .generateLesson(from: "Fröhliche Melodie Nr 9 finale")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3, "gave up on the model quickly")
+        guard case .notFound = outcome else { return XCTFail("with no answer in time, rules decide: not found") }
+        // A known song doesn't even wait for it.
+        let known = Date()
+        _ = try await service(cleaner: StubCleaner(answer: nil, delay: .seconds(30))).generateLesson(from: "Twinkle Twinkle")
+        XCTAssertLessThan(Date().timeIntervalSince(known), 1)
     }
 
     func testTitleSearchFindsABuiltInSongOffline() async throws {

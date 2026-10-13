@@ -294,6 +294,8 @@ struct AILessonGeneratorService: LessonGenerating {
     var library: [LibrarySong] = SongLibrary.all
     var titleFetcher: VideoTitleFetching = YouTubeOEmbedFetcher()
     var titleCleaner: TitleCleaning?
+    /// The on-device model must never hold up the lesson: if it takes longer than this, rules alone decide.
+    var cleanerTimeout: Duration = .seconds(3)
     var localEngine = LocalLessonEngine()
     var timeout: Duration = .seconds(15)
     var maxNotes = 400
@@ -331,12 +333,25 @@ struct AILessonGeneratorService: LessonGenerating {
         case .rawNotes:
             return .notFound(NotFoundInfo(query: trimmed, resolvedTitle: nil, reason: "No notes found.", suggestions: []))
         }
-        if let cleaner = titleCleaner, let cleaned = await cleaner.cleanedTitle(from: title) { title = cleaned + " " + (artist ?? "") }
-        let query = [title, artist ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        var query = [title, artist ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces)
 
-        // 3. Offline index.
+        // 3. Offline index: fast, deterministic rules first.
         if let match = SongMatcher.bestMatch(query: query, in: library) {
             return .lesson(match.song.lesson(hand: hand, source: .library), origin: .library(score: match.score))
+        }
+
+        // 3b. Only if the rules found nothing: let the on-device model have a go at understanding a messy title.
+        if let cleaner = titleCleaner {
+            let raw = title
+            let cleaned = try? await withTimeout(cleanerTimeout) { await cleaner.cleanedTitle(from: raw) }
+            if let cleaned, !cleaned.isEmpty {
+                let cleanedQuery = [cleaned, artist ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                if let match = SongMatcher.bestMatch(query: cleanedQuery, in: library) {
+                    return .lesson(match.song.lesson(hand: hand, source: .library), origin: .library(score: match.score))
+                }
+                title = cleaned
+                query = cleanedQuery
+            }
         }
 
         // 4. Optional endpoint.
@@ -392,15 +407,32 @@ struct AILessonGeneratorService: LessonGenerating {
 }
 
 /// Runs `operation`, throwing `LessonServiceError.timedOut` if it takes longer than `limit`.
+///
+/// Returns at the deadline even if `operation` ignores cancellation (a task group would wait for it): the straggler is
+/// cancelled and left to finish in the background, and its result is discarded.
 func withTimeout<T: Sendable>(_ limit: Duration, operation: @escaping @Sendable () async throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask { try await operation() }
-        group.addTask {
-            try await Task.sleep(for: limit)
-            throw LessonServiceError.timedOut
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<T, Error>) in
+        let finished = Locked(false)
+        /// True for exactly one caller: whoever gets there first resumes the continuation.
+        @Sendable func claim() -> Bool { finished.withLock { done in
+            if done { return false }
+            done = true
+            return true
+        } }
+        let work = Task {
+            do {
+                let value = try await operation()
+                if claim() { continuation.resume(returning: value) }
+            } catch {
+                if claim() { continuation.resume(throwing: error) }
+            }
         }
-        guard let first = try await group.next() else { throw LessonServiceError.timedOut }
-        group.cancelAll()
-        return first
+        Task {
+            try? await Task.sleep(for: limit)
+            if claim() {
+                work.cancel()
+                continuation.resume(throwing: LessonServiceError.timedOut)
+            }
+        }
     }
 }

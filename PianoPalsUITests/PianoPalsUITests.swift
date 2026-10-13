@@ -104,3 +104,78 @@ final class PianoPalsUITests: XCTestCase {
         XCTAssertFalse(app.navigationBars["Grown-ups"].waitForExistence(timeout: 1.5))
     }
 }
+
+final class PianoPalsAIFlowUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    private func launch(_ extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO"] + extra
+        app.launch()
+        return app
+    }
+
+    /// Finds any element (text, button, cell…) whose label contains `text`; Form rows combine their children differently by OS version.
+    private func element(containing text: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    func testUnknownSongShowsHonestNotFoundWithSuggestions() {
+        let app = launch(["-debugGrownUps", "YES", "-debugQuery", "Jingle Bell Rock"])
+        XCTAssertTrue(element(containing: "isn't in the free song library", in: app).waitForExistence(timeout: 15), "an honest not-found message")
+        XCTAssertTrue(element(containing: "Jingle Bells", in: app).exists, "the closest real song is suggested")
+        XCTAssertTrue(app.buttons["Make a practice tune anyway (not the real song)"].exists)
+        XCTAssertFalse(element(containing: "Added", in: app).exists, "nothing was added automatically")
+    }
+
+    func testKnownSongIsFoundOffline() {
+        let app = launch(["-debugGrownUps", "YES", "-debugQuery", "twinkel twinkle little star lyrics"])
+        XCTAssertTrue(element(containing: "found in the free song library", in: app).waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Play “Twinkle Twinkle” now"].exists)
+    }
+
+    func testListenSheetOpens() {
+        let app = launch(["-debugGrownUps", "YES"])
+        let listen = app.buttons["Listen to a song…"]
+        XCTAssertTrue(listen.waitForExistence(timeout: 10))
+        listen.tap()
+        XCTAssertTrue(app.navigationBars["Listen to a song"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Start listening"].exists)
+    }
+
+    func testCoachSpeaksGentlyAfterRepeatedWrongKeysAndNeverShowsNegativeWords() {
+        let app = launch(["-debugScreen", "lesson", "-debugSong", "five finger", "-debugAutostart", "YES"])
+        XCTAssertTrue(app.buttons["C4"].waitForExistence(timeout: 10))
+        for name in ["F4", "G4", "E4"] {   // three wrong keys while C4 is wanted
+            app.buttons[name].firstMatch.tap()
+            usleep(200_000)
+        }
+        let bubble = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'glowing key' OR label CONTAINS 'sparkle' OR label CONTAINS 'waiting'")).firstMatch
+        XCTAssertTrue(bubble.waitForExistence(timeout: 5), "the coach points to the glowing key")
+        for word in ["wrong", "bad", "mistake", "fail", "error"] {
+            XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", word)).firstMatch.exists, word)
+        }
+    }
+
+    func testFinishingASongRecordsProgressForGrownUps() {
+        let app = launch(["-debugScreen", "lesson", "-debugSong", "five finger", "-debugAutostart", "YES"])
+        XCTAssertTrue(app.buttons["C4"].waitForExistence(timeout: 10))
+        for name in ["C4", "D4", "E4", "F4", "G4", "F4", "E4", "D4", "C4"] {
+            app.buttons[name].firstMatch.tap()
+            usleep(250_000)
+        }
+        XCTAssertTrue(app.staticTexts["You did it!"].waitForExistence(timeout: 5))
+        app.buttons["More songs"].tap()
+        app.buttons["Home"].tap()
+        let gate = app.buttons["Grown-ups: hold"].firstMatch
+        XCTAssertTrue(gate.waitForExistence(timeout: 5))
+        gate.press(forDuration: 2.0)
+        XCTAssertTrue(app.navigationBars["Grown-ups"].waitForExistence(timeout: 5))
+        var found = false
+        for _ in 0..<8 where !found {
+            found = app.staticTexts["Five Finger Walk"].exists
+            if !found { app.swipeUp() }
+        }
+        XCTAssertTrue(found, "the finished song appears under Progress")
+    }
+}

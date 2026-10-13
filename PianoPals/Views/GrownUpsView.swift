@@ -11,7 +11,8 @@ struct GrownUpsView: View {
 }
 
 private struct GrownUpsContent: View {
-    let app: AppModel
+    /// Observed so the song-generation result, progress list and diagnostics redraw when they change.
+    @ObservedObject var app: AppModel
     @ObservedObject var midi: MIDIManager
     @ObservedObject var cameras: CameraHub
     @ObservedObject var settings: AppSettings
