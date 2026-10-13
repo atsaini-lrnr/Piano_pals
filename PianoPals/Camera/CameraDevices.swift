@@ -9,6 +9,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
         case ultraWide
         case continuity
         case external
+        case companion
         case other
     }
 
@@ -18,7 +19,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
 
     /// Built-in cameras can't run two at once (outside multi-cam sessions), so only one channel may use one.
     var isBuiltIn: Bool { kind == .front || kind == .back || kind == .ultraWide }
-    var isRemote: Bool { kind == .continuity || kind == .external }
+    var isRemote: Bool { kind == .continuity || kind == .external || kind == .companion }
 
     var symbolName: String {
         switch kind {
@@ -27,6 +28,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
         case .ultraWide: return "camera.aperture"
         case .continuity: return "iphone.gen3"
         case .external: return "web.camera"
+        case .companion: return "iphone.gen3"
         case .other: return "video"
         }
     }
@@ -38,6 +40,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
         case .ultraWide: return "iPad ultra-wide camera"
         case .continuity: return "iPhone (Continuity Camera)"
         case .external: return "External camera"
+        case .companion: return "iPhone in camera mode"
         case .other: return "Camera"
         }
     }

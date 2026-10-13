@@ -121,6 +121,7 @@ final class AppModel: ObservableObject {
         synth.start()
         midi.start()
         await cameras.start()
+        cameras.resumeCompanionIfKnown()
     }
 
     // MARK: Keyboard regions

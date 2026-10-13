@@ -41,6 +41,12 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     /// Flips the picture left/right on top of the automatic mirroring.
     @Published var flipHorizontally = false { didSet { applyOrientation() } }
 
+    /// True while this channel shows a nearby iPhone in camera mode instead of a local camera.
+    @Published private(set) var isRemote = false
+    /// The latest preview picture sent by the iPhone.
+    @Published private(set) var remotePreview: UIImage?
+    /// Optional: receives a frame's pixels (≈ 10 per second) on the output queue; used by the iPhone to send previews.
+    var previewHandler: (@Sendable (CVPixelBuffer) -> Void)?
     /// Invoked on the output queue for every processed frame.
     var onHandFrame: (@Sendable (HandFrame) -> Void)?
     /// Whether to look for the child's face on this channel (front camera only).
@@ -67,6 +73,8 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var notificationTokens: [NSObjectProtocol] = []
     private var lastPublishTime: TimeInterval = 0
     private var lastFaceTime: TimeInterval = 0
+    private var lastPreviewTime: TimeInterval = 0
+    private var lastRemotePublish: TimeInterval = 0
     private var targetFPS = 60.0
     /// Only touched on `outputQueue`.
     private var smoother = HandSmoother()
@@ -134,6 +142,42 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         face = nil
         framesPerSecond = 0
         if state != .denied { state = .idle }
+    }
+
+    // MARK: Remote (iPhone in camera mode)
+
+    func attachRemote(name: String) {
+        stop()
+        isRemote = true
+        deviceInfo = CameraDeviceInfo(id: "companion", name: name, kind: .companion)
+        videoSize = CGSize(width: 16, height: 9)
+        state = .running
+    }
+
+    func detachRemote() {
+        guard isRemote else { return }
+        isRemote = false
+        remotePreview = nil
+        latestFrame = nil
+        deviceInfo = nil
+        state = .noCamera
+    }
+
+    func setRemotePreview(_ image: UIImage) {
+        guard isRemote else { return }
+        remotePreview = image
+        if image.size.width > 0 { videoSize = CGSize(width: image.size.width, height: image.size.height) }
+    }
+
+    /// A frame from the iPhone. Safe to call from any queue; SwiftUI is updated at most ~30 times a second.
+    func publishRemote(frame: HandFrame) {
+        onHandFrame?(frame)
+        guard frame.timestamp - lastRemotePublish >= 1.0 / 30.0 else { return }
+        lastRemotePublish = frame.timestamp
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isRemote else { return }
+            self.latestFrame = frame
+        }
     }
 
     /// Lets a synthetic source (demo hands) publish frames as if they came from this camera.
@@ -283,6 +327,11 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         var result = processor.process(pixelBuffer: pixelBuffer, timestamp: timestamp, mirrored: settings.mirrored, detectFace: detectFace)
         result.hands = smoother.smooth(result.hands)
         onHandFrame?(result.hands)
+
+        if let handler = previewHandler, timestamp - lastPreviewTime >= 0.1 {
+            lastPreviewTime = timestamp
+            handler(pixelBuffer)
+        }
 
         // Publish to SwiftUI at most ~30 times a second.
         guard timestamp - lastPublishTime >= 1.0 / 30.0 else { return }

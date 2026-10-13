@@ -111,6 +111,10 @@ private struct GrownUpsContent: View {
             ForEach(CameraChannelID.allCases) { id in
                 CameraChannelRow(channel: cameras.channel(id), id: id)
             }
+            LabeledContent("Cameras this iPad can see") {
+                Text(cameras.availableDevices.isEmpty ? "none" : cameras.availableDevices.map(\.name).joined(separator: ", "))
+                    .font(.footnote).multilineTextAlignment(.trailing)
+            }
             Button("Choose cameras (including your iPhone)…") { app.showCameraPicker = true }
             Picker("Layout", selection: $cameras.layout) {
                 ForEach(CameraLayout.allCases) { Text($0.displayName).tag($0) }

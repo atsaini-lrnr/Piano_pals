@@ -23,6 +23,8 @@ final class CameraHub: ObservableObject {
 
     let primary = CameraChannel(id: .primary)
     let overhead = CameraChannel(id: .overhead)
+    /// Link to a nearby iPhone running Piano Pals in camera mode (iPadOS doesn't offer an iPhone as a system camera).
+    let companion = RemoteCameraLink()
 
     private enum Keys {
         static let primaryID = "camera.primaryID"
@@ -66,12 +68,44 @@ final class CameraHub: ObservableObject {
         overhead.$manualRotation.dropFirst().sink { defaults.set($0, forKey: Keys.overheadRotation) }.store(in: &cancellables)
         primary.$flipHorizontally.dropFirst().sink { defaults.set($0, forKey: Keys.primaryFlip) }.store(in: &cancellables)
         overhead.$flipHorizontally.dropFirst().sink { defaults.set($0, forKey: Keys.overheadFlip) }.store(in: &cancellables)
+        // The iPhone companion feeds the overhead channel.
+        let overheadChannel = overhead
+        companion.onFrame = { frame in overheadChannel.publishRemote(frame: frame) }
+        companion.onPreview = { image in overheadChannel.setRemotePreview(image) }
+        companion.onConnectionChange = { [weak self] name in
+            guard let self else { return }
+            if let name {
+                self.overhead.attachRemote(name: name)
+                self.notice = "Using \(name) as the overhead camera."
+            } else if self.overhead.isRemote {
+                self.overhead.detachRemote()
+                self.notice = "The iPhone camera disconnected."
+            }
+        }
+        // Turn / flip changes on the iPad are passed on to the iPhone.
+        overhead.$manualRotation.dropFirst().sink { [weak self] _ in self?.sendCompanionOrientation() }.store(in: &cancellables)
+        overhead.$flipHorizontally.dropFirst().sink { [weak self] _ in self?.sendCompanionOrientation() }.store(in: &cancellables)
+        companion.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         // Re-publish channel changes so views observing only the hub update.
         primary.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         overhead.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
     }
 
     func channel(_ id: CameraChannelID) -> CameraChannel { id == .primary ? primary : overhead }
+
+    private func sendCompanionOrientation() {
+        guard overhead.isRemote else { return }
+        companion.sendControl(rotation: overhead.manualRotation, flip: overhead.flipHorizontally)
+    }
+
+    /// Reconnects to the iPhone used last time, if there was one (called once the app is up).
+    func resumeCompanionIfKnown() {
+        var shouldSearch = companion.lastPhoneName != nil
+        #if DEBUG
+        shouldSearch = shouldSearch || UserDefaults.standard.bool(forKey: "debugAutoConnect")
+        #endif
+        if shouldSearch { companion.startSearching() }
+    }
 
     /// The channel whose hand tracking drives finger checking.
     var trackingChannel: CameraChannelID {
@@ -114,6 +148,18 @@ final class CameraHub: ObservableObject {
 
     /// Pause capture when the app leaves the foreground; resume on return.
     func setActive(_ active: Bool) {
+        if active {
+            // The grown-up may have just switched the camera on in Settings.
+            let current = AVCaptureDevice.authorizationStatus(for: .video)
+            if current != authorization {
+                authorization = current
+                if current == .authorized {
+                    refreshCatalog()
+                    assignInitialDevices()
+                    return
+                }
+            }
+        }
         guard authorization == .authorized else { return }
         if active {
             for id in CameraChannelID.allCases where channel(id).state == .idle {
@@ -232,6 +278,7 @@ final class CameraHub: ObservableObject {
 
     private func startChannel(_ id: CameraChannelID, with info: CameraDeviceInfo) {
         guard authorization == .authorized else { return }
+        if id == .overhead, overhead.isRemote { return }
         let ch = channel(id)
         guard let device = AVCaptureDevice(uniqueID: info.id) else {
             ch.setUnavailable(.noCamera)

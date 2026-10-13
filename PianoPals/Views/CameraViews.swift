@@ -12,11 +12,15 @@ struct CameraTile: View {
     var body: some View {
         ZStack {
             Color.black
-            switch channel.state {
-            case .running, .starting, .interrupted:
-                CameraPreviewView(channel: channel)
-            default:
-                placeholder
+            if channel.isRemote {
+                RemotePreviewImage(image: channel.remotePreview)
+            } else {
+                switch channel.state {
+                case .running, .starting, .interrupted:
+                    CameraPreviewView(channel: channel)
+                default:
+                    placeholder
+                }
             }
             HandOverlayView(frame: channel.latestFrame, highlight: highlight)
 
@@ -101,6 +105,25 @@ struct CameraTile: View {
         case .failed: return "The camera isn't working right now. Ask a grown-up to check it."
         case .noCamera: return channel.id == .overhead ? "No overhead camera yet" : "No camera found"
         default: return "Getting the camera ready…"
+        }
+    }
+}
+
+/// The picture sent by the iPhone, filling the tile.
+private struct RemotePreviewImage: View {
+    let image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                VStack(spacing: 8) {
+                    ProgressView().tint(.white)
+                    Text("Waiting for the iPhone's picture…").font(.kid(18, weight: .bold)).foregroundStyle(.white.opacity(0.8))
+                }
+            }
         }
     }
 }
@@ -208,20 +231,94 @@ struct CameraPickerSheet: View {
                 }
 
                 Section {
-                    Label("Sign in to the same Apple ID on the iPad and the iPhone.", systemImage: "1.circle")
-                    Label("Turn on Wi-Fi and Bluetooth on both.", systemImage: "2.circle")
-                    Label("Prop the iPhone sideways above the keys, screen locked, with its back cameras looking down.", systemImage: "3.circle")
-                    Label("Wait a few seconds: it appears in the list above by itself.", systemImage: "4.circle")
-                } header: { Text("Using your iPhone as the overhead camera") }
+                    CompanionSection(link: hub.companion, overhead: hub.overhead)
+                } header: { Text("Use your iPhone as the overhead camera") } footer: {
+                    Text("iPadOS doesn't offer an iPhone as a normal camera, so Piano Pals does it itself: the iPhone watches the keys, finds the hands, and sends just the hand positions to the iPad over a private local connection. No internet, no recording.")
+                }
 
                 if let notice = hub.notice {
                     Section { Text(notice).foregroundStyle(.orange) }
                 }
             }
+            .modifier(PairingCodePrompt(link: hub.companion))
             .navigationTitle("Choose cameras")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .onAppear { hub.refreshCatalog() }
+            .onAppear {
+                hub.refreshCatalog()
+                hub.companion.startSearching()
+            }
+            .onDisappear { hub.companion.stopSearching() }
+        }
+    }
+}
+
+/// Step-by-step connection to a nearby iPhone in camera mode.
+private struct CompanionSection: View {
+    @ObservedObject var link: RemoteCameraLink
+    @ObservedObject var overhead: CameraChannel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Open Piano Pals on your iPhone. It becomes a camera automatically.", systemImage: "1.circle")
+            Label("Prop the iPhone above the keys, pointing down. Keep both on the same Wi-Fi (or Bluetooth on).", systemImage: "2.circle")
+            Label("Pick your iPhone below and type the 8-digit pairing code shown on it (only needed once).", systemImage: "3.circle")
+        }
+        .font(.callout)
+
+        switch link.state {
+        case .connected(let name):
+            HStack {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                VStack(alignment: .leading) {
+                    Text("Connected to \(name)").font(.headline)
+                    Text(String(format: "%.0f hand updates/s%@", link.framesPerSecond,
+                                link.roundTripMs.map { String(format: " · %.0f ms to the iPhone", $0) } ?? ""))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Disconnect") { link.disconnect() }.buttonStyle(.bordered)
+            }
+        case .connecting(let name):
+            HStack { ProgressView(); Text("Connecting to \(name)…") }
+        case .idle, .searching:
+            if link.nearby.isEmpty {
+                HStack { ProgressView(); Text("Looking for iPhones in camera mode…").foregroundStyle(.secondary) }
+            }
+            ForEach(link.nearby) { phone in
+                Button { link.select(phone) } label: {
+                    HStack {
+                        Image(systemName: "iphone.gen3")
+                        Text(phone.name)
+                        Spacer()
+                        Text("Connect").foregroundStyle(.tint)
+                    }
+                }
+            }
+            if link.state == .idle {
+                Button("Look again") { link.startSearching() }.buttonStyle(.bordered)
+            }
+        }
+        if let message = link.message { Text(message).font(.footnote).foregroundStyle(.orange) }
+    }
+}
+
+/// Asks for the pairing code shown on the iPhone.
+private struct PairingCodePrompt: ViewModifier {
+    @ObservedObject var link: RemoteCameraLink
+    @State private var typed = ""
+
+    func body(content: Content) -> some View {
+        content.alert("Pairing code", isPresented: Binding(get: { link.needsCode != nil }, set: { if !$0 { link.needsCode = nil } }),
+                      presenting: link.needsCode) { phone in
+            TextField("8-digit code", text: $typed).keyboardType(.numberPad)
+            Button("Connect") {
+                link.connect(to: phone, code: typed)
+                typed = ""
+            }
+            Button("Cancel", role: .cancel) { typed = "" }
+        } message: { phone in
+            Text("Type the code shown on “\(phone.name)”.")
         }
     }
 }
