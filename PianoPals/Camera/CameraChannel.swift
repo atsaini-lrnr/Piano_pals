@@ -75,6 +75,10 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var lastFaceTime: TimeInterval = 0
     private var lastPreviewTime: TimeInterval = 0
     private var lastRemotePublish: TimeInterval = 0
+    private var statsWindowStart: TimeInterval = 0
+    private var statsFrames = 0
+    private var statsHandFrames = 0
+    private var dumpedFrame = false
     private var targetFPS = 60.0
     /// Only touched on `outputQueue`.
     private var smoother = HandSmoother()
@@ -313,6 +317,42 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         })
     }
 
+    #if DEBUG
+    /// Average brightness (0–255) sampled from the luma plane; ~0 means a black picture.
+    static func meanLuma(_ pixelBuffer: CVPixelBuffer) -> Double {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        guard CVPixelBufferIsPlanar(pixelBuffer), let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return -1 }
+        let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0), height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
+        let stride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+        var total = 0.0, count = 0.0
+        for y in Swift.stride(from: 0, to: height, by: 40) {
+            let row = base.advanced(by: y * stride).assumingMemoryBound(to: UInt8.self)
+            for x in Swift.stride(from: 0, to: width, by: 40) { total += Double(row[x]); count += 1 }
+        }
+        return count > 0 ? total / count : -1
+    }
+
+    /// Debug aid: logs frames/s and hands seen, and (with `-debugDumpFrame YES`) saves one frame to Documents/frame-<channel>.jpg
+    /// so it can be fetched from a real device and inspected.
+    private func debugStats(timestamp: TimeInterval, pixelBuffer: CVPixelBuffer) {
+        if statsWindowStart == 0 { statsWindowStart = timestamp }
+        statsFrames += 1
+        if timestamp - statsWindowStart >= 2 {
+            let width = CVPixelBufferGetWidth(pixelBuffer), height = CVPixelBufferGetHeight(pixelBuffer)
+            CameraChannel.log.info("[\(self.id.rawValue, privacy: .public)] \(Double(self.statsFrames) / (timestamp - self.statsWindowStart), format: .fixed(precision: 1)) fps, buffer \(width)x\(height) format \(CVPixelBufferGetPixelFormatType(pixelBuffer)), mean luma \(CameraChannel.meanLuma(pixelBuffer), format: .fixed(precision: 1)), device \(self.currentDevice?.localizedName ?? "?", privacy: .public) [\(self.currentDevice?.deviceType.rawValue ?? "?", privacy: .public)] format \(self.currentDevice?.activeFormat.description ?? "?", privacy: .public), hands: \(self.latestFrame?.hands.count ?? -1)")
+            statsWindowStart = timestamp
+            statsFrames = 0
+        }
+        if !dumpedFrame, UserDefaults.standard.bool(forKey: "debugDumpFrame"), timestamp - statsWindowStart > 1, let jpeg = PreviewEncoder().jpeg(from: pixelBuffer) {
+            dumpedFrame = true
+            let url = URL.documentsDirectory.appending(path: "frame-\(id.rawValue).jpg")
+            try? jpeg.data.write(to: url)
+            CameraChannel.log.info("[\(self.id.rawValue, privacy: .public)] saved debug frame \(jpeg.width)x\(jpeg.height) to \(url.lastPathComponent, privacy: .public)")
+        }
+    }
+    #endif
+
     // MARK: Frames (outputQueue)
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
@@ -324,6 +364,9 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let detectFace = settings.detectFace && timestamp - lastFaceTime >= 0.12
         if detectFace { lastFaceTime = timestamp }
 
+        #if DEBUG
+        debugStats(timestamp: timestamp, pixelBuffer: pixelBuffer)
+        #endif
         var result = processor.process(pixelBuffer: pixelBuffer, timestamp: timestamp, mirrored: settings.mirrored, detectFace: detectFace)
         result.hands = smoother.smooth(result.hands)
         onHandFrame?(result.hands)

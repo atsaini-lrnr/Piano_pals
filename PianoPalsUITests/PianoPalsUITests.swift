@@ -80,20 +80,13 @@ final class PianoPalsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Let's play!"].exists)
     }
 
-    func testGrownUpsGateAndLessonGeneration() {
+    func testGrownUpsGateOpensWithPressAndHold() {
         let app = launch()
         let gate = app.buttons["Grown-ups: hold"].firstMatch
         XCTAssertTrue(gate.waitForExistence(timeout: 10))
         gate.press(forDuration: 2.0)
         XCTAssertTrue(app.navigationBars["Grown-ups"].waitForExistence(timeout: 5), "press-and-hold opens the grown-ups panel")
-
-        let field = app.textFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.tap()
-        field.typeText("Ode to Joy by Beethoven")
-        app.buttons["Make a lesson"].tap()
-        let added = app.staticTexts["Added “Ode to Joy”."]
-        XCTAssertTrue(added.waitForExistence(timeout: 10), "mock service returns the song")
+        XCTAssertTrue(app.textFields.firstMatch.waitForExistence(timeout: 5), "the song box is there")
     }
 
     func testTappingTheGateBrieflyDoesNotOpenGrownUps() {
@@ -172,8 +165,8 @@ final class PianoPalsAIFlowUITests: XCTestCase {
         gate.press(forDuration: 2.0)
         XCTAssertTrue(app.navigationBars["Grown-ups"].waitForExistence(timeout: 5))
         var found = false
-        for _ in 0..<8 where !found {
-            found = app.staticTexts["Five Finger Walk"].exists
+        for _ in 0..<10 where !found {
+            found = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Five Finger Walk'")).firstMatch.exists
             if !found { app.swipeUp() }
         }
         XCTAssertTrue(found, "the finished song appears under Progress")

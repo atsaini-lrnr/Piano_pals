@@ -191,6 +191,11 @@ final class CameraHub: ObservableObject {
     }
 
     func refreshCatalog() {
+        #if DEBUG
+        for device in discovery.devices {
+            CameraChannel.log.info("catalog: \(device.localizedName, privacy: .public) | \(device.deviceType.rawValue, privacy: .public) | position \(device.position.rawValue) | \(device.uniqueID, privacy: .public)")
+        }
+        #endif
         var seen = Set<String>()
         availableDevices = discovery.devices
             .filter { seen.insert($0.uniqueID).inserted }
@@ -226,12 +231,20 @@ final class CameraHub: ObservableObject {
     // MARK: Assignment
 
     private func defaultPrimary() -> CameraDeviceInfo? {
-        availableDevices.first { $0.kind == .front } ?? availableDevices.first { $0.isBuiltIn }
+        #if DEBUG
+        if let wanted = UserDefaults.standard.string(forKey: "debugCamera"),
+           let match = availableDevices.first(where: { $0.name.localizedCaseInsensitiveContains(wanted) }) { return match }
+        #endif
+        return availableDevices.first { $0.kind == .front } ?? availableDevices.first { $0.isBuiltIn }
     }
 
     private func assignInitialDevices() {
         let defaults = UserDefaults.standard
-        let storedPrimary = defaults.string(forKey: Keys.primaryID).flatMap { id in availableDevices.first { $0.id == id } }
+        var storedPrimary = defaults.string(forKey: Keys.primaryID).flatMap { id in availableDevices.first { $0.id == id } }
+        #if DEBUG
+        // `-debugCamera <name>` wins over any saved choice, for testing individual cameras.
+        if let wanted = defaults.string(forKey: "debugCamera"), let match = availableDevices.first(where: { $0.name.localizedCaseInsensitiveContains(wanted) }) { storedPrimary = match }
+        #endif
         let storedOverhead = defaults.string(forKey: Keys.overheadID).flatMap { id in availableDevices.first { $0.id == id } }
 
         if let info = storedPrimary ?? defaultPrimary() { startChannel(.primary, with: info) } else { primary.setUnavailable(.noCamera) }

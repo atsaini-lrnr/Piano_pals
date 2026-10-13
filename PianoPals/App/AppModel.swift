@@ -59,6 +59,9 @@ final class AppModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var pumpContinuation: AsyncStream<MIDINoteEvent>.Continuation?
     private var demoTask: Task<Void, Never>?
+    #if DEBUG
+    private let rawProbe = RawCameraProbe()
+    #endif
     private var analyzer = MistakeAnalyzer()
     private var coach = Coach()
     private let progressStore = ProgressStore()
@@ -120,6 +123,14 @@ final class AppModel: ObservableObject {
         applyDebugLaunchOptions()
         synth.start()
         midi.start()
+        #if DEBUG
+        if let raw = UserDefaults.standard.string(forKey: "debugRawCamera") {
+            let delay = UserDefaults.standard.double(forKey: "debugRawDelay")
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            rawProbe.start(position: raw == "back" ? .back : .front)
+            return
+        }
+        #endif
         await cameras.start()
         cameras.resumeCompanionIfKnown()
     }

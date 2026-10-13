@@ -23,7 +23,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
 
     var symbolName: String {
         switch kind {
-        case .front: return "ipad.badge.person.crop"
+        case .front: return "person.crop.rectangle"
         case .back: return "camera"
         case .ultraWide: return "camera.aperture"
         case .continuity: return "iphone.gen3"
