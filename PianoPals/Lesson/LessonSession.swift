@@ -18,6 +18,8 @@ enum HitQuality: Equatable {
     case fingerUnverified
     /// Right key, but a different finger than suggested.
     case fingerOff(played: Finger)
+    /// Right key, played with the other hand.
+    case wrongHand(played: HandSide)
 }
 
 enum NoteProgress: Equatable {
@@ -52,6 +54,8 @@ enum SessionEvent: Equatable {
     case started
     case noteHit(index: Int, note: Note, quality: HitQuality)
     case gentleMiss(played: Int, expected: [Int])
+    /// "Play along" mode only: a note slid past unplayed. Never penalised; used by the coach.
+    case noteMissed(index: Int, note: Note)
     case freePlay(note: Int)
     case finished(stars: Int)
 }
@@ -237,7 +241,7 @@ final class LessonSession: ObservableObject {
 
     private func classify(expected: Note, detected: DetectedFinger?, lessonHand: HandSide) -> HitQuality {
         guard let detected else { return .fingerUnverified }
-        if let hand = detected.hand, hand != lessonHand { return .fingerOff(played: detected.finger) }
+        if let hand = detected.hand, hand != lessonHand { return .wrongHand(played: hand) }
         return detected.finger == expected.finger ? .perfect : .fingerOff(played: detected.finger)
     }
 
@@ -291,6 +295,7 @@ final class LessonSession: ObservableObject {
             for index in lesson.notes.indices where noteProgress[index] == .pending
                 && lesson.notes[index].timestamp + LessonSession.hitWindow < time {
                 noteProgress[index] = .missed
+                events.send(.noteMissed(index: index, note: lesson.notes[index]))
                 changed = true
             }
             if changed { consecutiveWrong = 0 }
@@ -325,6 +330,11 @@ final class LessonSession: ObservableObject {
         if updated != targets { targets = updated }
     }
 
+    /// Softly glows the key(s) we're waiting for (used by the coach after hesitation or repeated wrong keys).
+    func showHint() {
+        for target in targets { keyFeedback[target.note.noteNumber] = KeyFeedback(kind: .hint) }
+    }
+
     private func finishIfComplete() {
         guard phase == .playing, !noteProgress.isEmpty, !noteProgress.contains(.pending) else { return }
         frozenTime = lesson?.duration ?? 0
@@ -341,7 +351,7 @@ final class LessonSession: ObservableObject {
         let weights = noteProgress.map { progress -> Double in
             switch progress {
             case .hit(.perfect), .hit(.fingerUnverified): return 1
-            case .hit(.fingerOff): return 0.6
+            case .hit(.fingerOff), .hit(.wrongHand): return 0.6
             case .missed: return 0.2
             case .pending: return 0
             }

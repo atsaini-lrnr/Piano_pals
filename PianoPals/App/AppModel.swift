@@ -26,6 +26,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var songs: [Lesson]
     @Published private(set) var generation: GenerationState = .idle
     @Published private(set) var regions: [CameraChannelID: KeyboardRegion] = [:]
+    /// What the coach just said (shown in the panda's bubble) and which finger it wants the child to look at.
+    @Published private(set) var coachMessage: String?
+    @Published private(set) var fingerCue: Finger?
+    @Published private(set) var progress: [SessionSummary] = []
+    /// Plain-language note for the grown-up about the latest session.
+    @Published private(set) var parentNote: String?
 
     let settings: AppSettings
     let midi = MIDIManager()
@@ -42,7 +48,14 @@ final class AppModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var pumpContinuation: AsyncStream<MIDINoteEvent>.Continuation?
     private var demoTask: Task<Void, Never>?
-    private var hitCounter = 0
+    private var analyzer = MistakeAnalyzer()
+    private var coach = Coach()
+    private let progressStore = ProgressStore()
+    var summaryPhraser: SummaryPhrasing = OnDeviceSummaryPhraser()
+    private var lessonStartedAt: Date?
+    private var coachClock: Task<Void, Never>?
+    private var messageTask: Task<Void, Never>?
+    private var cueTask: Task<Void, Never>?
 
     init(settings: AppSettings = AppSettings(),
          generator: LessonGenerating = AILessonGeneratorService(transport: MockLessonTransport(latency: .milliseconds(300)), titleCleaner: OnDeviceTitleCleaner())) {
@@ -59,6 +72,7 @@ final class AppModel: ObservableObject {
         session.tempoScale = settings.tempoScale
         narrator.isEnabled = settings.narrationEnabled
         loadRegions()
+        progress = progressStore.load()
 
         // Settings → live objects.
         settings.$paceMode.sink { [weak self] in self?.session.mode = $0 }.store(in: &cancellables)
@@ -147,6 +161,7 @@ final class AppModel: ObservableObject {
     }
 
     func leaveLesson() {
+        coachClock?.cancel()
         session.stop()
         narrator.stop()
         screen = .songs
@@ -250,27 +265,118 @@ final class AppModel: ObservableObject {
 
     private func react(to event: SessionEvent) {
         avatar.react(to: event)
+        let now = HostClock.now
+
+        // Visual celebrations.
         switch event {
         case .noteHit(_, let note, let quality):
-            hitCounter += 1
             let origin = CGPoint(x: 0.5, y: 0.75)
             switch quality {
             case .perfect, .fingerUnverified:
                 confetti.fire(.burst, at: origin, accent: note.finger.color)
-            case .fingerOff:
+            case .fingerOff, .wrongHand:
                 confetti.fire(.sparkle, at: origin, accent: note.finger.color)
-                narrator.say("Try the \(note.finger.kidName) finger next time!", interrupt: false, minimumGap: 6)
             }
-            if hitCounter % 5 == 0, case .perfect = quality { narrator.say(["Great job!", "Wow!", "Amazing!", "You're a star!"].randomElement() ?? "Great job!", interrupt: false, minimumGap: 4) }
-        case .gentleMiss:
-            if session.consecutiveWrong >= 2 { narrator.say("Try the glowing key!", interrupt: false, minimumGap: 8) }
-        case .finished(let stars):
+        case .finished:
             confetti.fire(.finale, at: CGPoint(x: 0.5, y: 0.35), accent: Palette.sunny)
             synth.playChime()
-            narrator.say(stars == 3 ? "Wow! You did it! Three stars!" : "You did it! Great playing!")
-        case .started, .freePlay:
+        default:
             break
         }
+
+        // Mistakes → coach.
+        var actions: [CoachAction] = []
+        if case .started = event {
+            coach.reset()
+            lessonStartedAt = Date()
+            startCoachClock()
+        }
+        let mistakes = analyzer.ingest(event, lessonHand: session.lesson?.hand ?? .right, now: now)
+        for mistake in mistakes {
+            actions += coach.react(to: mistake, stats: analyzer.stats, mode: settings.paceMode, tempoScale: settings.tempoScale, now: now)
+        }
+        if case .noteHit(_, _, let quality) = event { actions += coach.reactToHit(quality: quality, now: now) }
+        if case .finished(let stars) = event {
+            coachClock?.cancel()
+            actions += coach.reactToFinish(stars: stars, stats: analyzer.stats)
+            recordSession(stars: stars)
+        }
+        perform(actions)
+    }
+
+    private func perform(_ actions: [CoachAction]) {
+        for action in actions {
+            switch action {
+            case .say(let text):
+                show(message: text)
+                narrator.say(text, interrupt: false)
+            case .highlightTarget:
+                session.showHint()
+            case .showFingerHint(let finger):
+                fingerCue = finger
+                cueTask?.cancel()
+                cueTask = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(2.5))
+                    guard !Task.isCancelled else { return }
+                    self?.fingerCue = nil
+                }
+            case .adjustPace(let waitForMe, let tempoScale):
+                if waitForMe { settings.paceMode = .waitForMe }
+                if let tempoScale { settings.tempoScale = tempoScale }
+            }
+        }
+    }
+
+    private func show(message: String) {
+        coachMessage = message
+        messageTask?.cancel()
+        messageTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4.5))
+            guard !Task.isCancelled else { return }
+            self?.coachMessage = nil
+        }
+    }
+
+    /// About once a second while playing: notices when the child is stuck (hesitation).
+    private func startCoachClock() {
+        coachClock?.cancel()
+        coachClock = Task { @MainActor [weak self] in
+            var lastPhase: LessonSession.Phase = .playing
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self else { return }
+                let phase = self.session.phase
+                if phase == .playing, lastPhase == .paused { self.analyzer.resumed(at: HostClock.now) }
+                lastPhase = phase
+                guard phase == .playing else { continue }
+                let now = HostClock.now
+                let mistakes = self.analyzer.tick(now: now, hasTargets: !self.session.targets.isEmpty)
+                var actions: [CoachAction] = []
+                for mistake in mistakes {
+                    actions += self.coach.react(to: mistake, stats: self.analyzer.stats, mode: self.settings.paceMode,
+                                                tempoScale: self.settings.tempoScale, now: now)
+                }
+                self.perform(actions)
+            }
+        }
+    }
+
+    private func recordSession(stars: Int) {
+        guard let lesson = session.lesson else { return }
+        let duration = lessonStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        let summary = SessionSummary(lessonTitle: lesson.title, durationSeconds: duration, notes: lesson.notes.count, stars: stars, stats: analyzer.stats)
+        progressStore.append(summary)
+        progress = progressStore.load()
+        Task { [weak self, summaryPhraser] in
+            let text = await summaryPhraser.phrase(for: summary)
+            self?.parentNote = text
+        }
+    }
+
+    func clearProgress() {
+        progressStore.clear()
+        progress = []
+        parentNote = nil
     }
 
     // MARK: Demo hands (Simulator / UI checks)

@@ -4,13 +4,14 @@ struct LessonView: View {
     @EnvironmentObject private var app: AppModel
 
     var body: some View {
-        LessonContent(app: app, session: app.session, cameras: app.cameras, avatar: app.avatar,
+        LessonContent(app: app, model: app, session: app.session, cameras: app.cameras, avatar: app.avatar,
                       midi: app.midi, settings: app.settings, confetti: app.confetti)
     }
 }
 
 private struct LessonContent: View {
     let app: AppModel
+    @ObservedObject var model: AppModel
     @ObservedObject var session: LessonSession
     @ObservedObject var cameras: CameraHub
     @ObservedObject var avatar: AvatarModel
@@ -106,6 +107,20 @@ private struct LessonContent: View {
                 FallingNotesView(session: session, span: span)
                     .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
 
+                if let finger = model.fingerCue {
+                    VStack {
+                        HStack(spacing: 12) {
+                            Text("Try").font(.kid(30)).foregroundStyle(.white)
+                            FingerBadge(finger: finger, size: 84)
+                            Text("finger").font(.kid(30)).foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 22).padding(.vertical, 10)
+                        .background(Capsule().fill(Color.black.opacity(0.55)))
+                        Spacer()
+                    }
+                    .padding(.top, 14)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 if session.phase == .ready {
                     VStack(spacing: 20) {
                         Text("Ready?").font(.kid(46)).foregroundStyle(.white)
@@ -117,6 +132,7 @@ private struct LessonContent: View {
                 }
             }
             .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(.white, lineWidth: 4))
+            .animation(.easeOut(duration: 0.25), value: model.fingerCue)
 
             KeyboardView(span: span, targets: session.targets, feedback: session.keyFeedback, pressed: midi.pressedNotes) { note, down in
                 app.virtualKey(note, isDown: down)
@@ -129,8 +145,22 @@ private struct LessonContent: View {
 
     private var sideColumn: some View {
         VStack(spacing: 14) {
-            AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt)
-                .frame(height: 210)
+            ZStack(alignment: .topLeading) {
+                AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt)
+                    .frame(height: 210)
+                if let message = model.coachMessage {
+                    Text(message)
+                        .font(.kid(22, weight: .bold))
+                        .foregroundStyle(Palette.ink)
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white))
+                        .shadow(color: .black.opacity(0.15), radius: 4, y: 3)
+                        .frame(maxWidth: 300, alignment: .leading)
+                        .transition(.scale(scale: 0.8, anchor: .bottomLeading).combined(with: .opacity))
+                        .accessibilityLabel(message)
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
             CameraPanel(hub: cameras, highlight: session.targets.first?.note.finger, demoHands: settings.demoHands) {
                 app.showCameraPicker = true
             }

@@ -100,7 +100,7 @@ final class LessonSessionTests: XCTestCase {
         session.start()
         advance(5)
         session.handleNoteOn(note: 60, detected: DetectedFinger(finger: .thumb, hand: .left, channel: .overhead, distance: 0))
-        XCTAssertEqual(session.noteProgress[0], .hit(.fingerOff(played: .thumb)))
+        XCTAssertEqual(session.noteProgress[0], .hit(.wrongHand(played: .left)))
     }
 
     func testStarsReflectFingerAccuracyButAlwaysAtLeastOne() {
@@ -169,6 +169,26 @@ final class LessonSessionTests: XCTestCase {
         XCTAssertEqual(session.noteProgress[2], .missed)
         XCTAssertEqual(session.phase, .finished)
         XCTAssertEqual(session.stars, 1, "finishing always earns a star, even when most notes faded")
+    }
+
+    func testPlayAlongReportsEachSkippedNoteExactlyOnce() {
+        let session = makeSession(lesson("C4 D4"), mode: .playAlong)
+        let events = collect(session)
+        session.start()
+        advance(30)
+        session.tick()
+        session.tick()
+        let missed = events().filter { if case .noteMissed = $0 { return true } else { return false } }
+        XCTAssertEqual(missed.count, 2)
+    }
+
+    func testShowHintGlowsTheWaitingKey() {
+        let session = makeSession(lesson())
+        session.start()
+        advance(5)
+        session.showHint()
+        XCTAssertEqual(session.keyFeedback[60]?.kind, .hint)
+        XCTAssertNil(session.keyFeedback[62])
     }
 
     func testPlayAlongIgnoresNotesOutsideTheWindow() {

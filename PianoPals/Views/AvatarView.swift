@@ -27,9 +27,10 @@ final class AvatarModel: ObservableObject {
         case .noteHit(_, _, let quality):
             switch quality {
             case .perfect, .fingerUnverified: celebrationCount += 1; set(.cheering, for: 1.1)
-            case .fingerOff: set(.happy, for: 1.1)
+            case .fingerOff, .wrongHand: set(.happy, for: 1.1)
             }
         case .gentleMiss: set(.encouraging, for: 1.8)
+        case .noteMissed: break
         case .finished: celebrationCount += 1; set(.cheering, for: 4.5)
         case .freePlay: set(.happy, for: 0.8)
         }

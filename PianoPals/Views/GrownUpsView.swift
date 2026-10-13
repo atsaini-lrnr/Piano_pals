@@ -28,6 +28,7 @@ private struct GrownUpsContent: View {
                 cameraSection
                 pianoSection
                 playSection
+                progressSection
                 calibrationSection
                 funSection
                 diagnosticsSection
@@ -159,6 +160,36 @@ private struct GrownUpsContent: View {
             }
         } header: { Text("Playing") } footer: {
             Text("“Wait for me” pauses the song until the right key is played — best for beginners.")
+        }
+    }
+
+    // MARK: Progress
+
+    private var progressSection: some View {
+        Section {
+            if let note = app.parentNote {
+                Text(note).font(.callout)
+            }
+            if app.progress.isEmpty {
+                Text("Finished songs will show up here.").foregroundStyle(.secondary)
+            }
+            ForEach(app.progress.prefix(6)) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(item.lessonTitle).font(.headline)
+                        Spacer()
+                        Text(String(repeating: "★", count: item.stars) + String(repeating: "☆", count: 3 - item.stars)).foregroundStyle(.orange)
+                    }
+                    Text("\(Int((item.firstTryAccuracy * 100).rounded()))% first try"
+                         + (item.fingerAccuracy.map { " · fingers \(Int(($0 * 100).rounded()))%" } ?? "")
+                         + (item.weakestFinger.flatMap(Finger.init(rawValue:)).map { " · practise the \($0.displayName.lowercased()) finger" } ?? "")
+                         + " · " + item.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            if !app.progress.isEmpty { Button("Clear progress", role: .destructive) { app.clearProgress() } }
+        } header: { Text("Progress") } footer: {
+            Text("Kept on this iPad only. The last 30 songs are remembered.")
         }
     }
 
