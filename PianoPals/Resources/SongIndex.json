@@ -1,0 +1,282 @@
+[
+ {
+  "id": "five-finger-walk",
+  "title": "Five Finger Walk",
+  "composer": "Warm-up",
+  "emoji": "🐛",
+  "tempoBPM": 80,
+  "notation": "C4 D4 E4 F4 G4 F4 E4 D4 C4:2",
+  "aliases": [
+   "five finger",
+   "warm up",
+   "scale",
+   "c major scale",
+   "walk"
+  ],
+  "license": "Original exercise (CC0)",
+  "source": "Piano Pals"
+ },
+ {
+  "id": "twinkle",
+  "title": "Twinkle Twinkle",
+  "composer": "Traditional",
+  "emoji": "⭐",
+  "tempoBPM": 84,
+  "notation": "C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2",
+  "aliases": [
+   "twinkle",
+   "little star",
+   "ah vous dirai-je",
+   "ah vous dirai je",
+   "alphabet song",
+   "abc song",
+   "baa baa black sheep",
+   "mozart"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "mary-lamb",
+  "title": "Mary Had a Little Lamb",
+  "composer": "Traditional",
+  "emoji": "🐑",
+  "tempoBPM": 92,
+  "notation": "E4 D4 C4 D4 E4 E4 E4:2 D4 D4 D4:2 E4 G4 G4:2 E4 D4 C4 D4 E4 E4 E4 E4 D4 D4 E4 D4 C4:4",
+  "aliases": [
+   "mary",
+   "lamb",
+   "little lamb",
+   "merrily we roll along"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "hot-cross-buns",
+  "title": "Hot Cross Buns",
+  "composer": "Traditional",
+  "emoji": "🥐",
+  "tempoBPM": 88,
+  "notation": "E4 D4 C4:2 E4 D4 C4:2 C4 C4 C4 C4 D4 D4 D4 D4 E4 D4 C4:2",
+  "aliases": [
+   "hot cross",
+   "buns"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "ode-to-joy",
+  "title": "Ode to Joy",
+  "composer": "Ludwig van Beethoven",
+  "emoji": "🎉",
+  "tempoBPM": 96,
+  "notation": "E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4:1.5 D4:0.5 D4:2",
+  "aliases": [
+   "ode",
+   "ninth symphony",
+   "9th symphony",
+   "symphony no 9",
+   "symphony",
+   "ode an die freude"
+  ],
+  "license": "Public domain (Beethoven, d. 1827)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "jingle-bells",
+  "title": "Jingle Bells",
+  "composer": "James Lord Pierpont",
+  "emoji": "🔔",
+  "tempoBPM": 100,
+  "notation": "E4 E4 E4:2 E4 E4 E4:2 E4 G4 C4:1.5 D4:0.5 E4:4",
+  "aliases": [
+   "jingle",
+   "bells"
+  ],
+  "license": "Public domain (1857)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "row-boat",
+  "title": "Row Your Boat",
+  "composer": "Traditional",
+  "emoji": "🚣",
+  "tempoBPM": 100,
+  "notation": "C4 C4 C4:0.75 D4:0.25 E4 E4:0.75 D4:0.25 E4:0.75 F4:0.25 G4:2",
+  "aliases": [
+   "row row",
+   "row your boat",
+   "boat",
+   "gently down the stream"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "frere-jacques",
+  "title": "Frère Jacques",
+  "composer": "Traditional",
+  "emoji": "🔔",
+  "tempoBPM": 96,
+  "notation": "C4 D4 E4 C4 C4 D4 E4 C4 E4 F4 G4:2 E4 F4 G4:2 G4:0.5 A4:0.5 G4:0.5 F4:0.5 E4 C4 G4:0.5 A4:0.5 G4:0.5 F4:0.5 E4 C4 C4 G3 C4:2 C4 G3 C4:2",
+  "aliases": [
+   "frere jacques",
+   "brother john",
+   "are you sleeping",
+   "martin"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "london-bridge",
+  "title": "London Bridge",
+  "composer": "Traditional",
+  "emoji": "🌉",
+  "tempoBPM": 100,
+  "notation": "G4:1.5 A4:0.5 G4 F4 E4 F4 G4:2 D4 E4 F4:2 E4 F4 G4:2 G4:1.5 A4:0.5 G4 F4 E4 F4 G4:2 D4:2 G4 E4 C4:2",
+  "aliases": [
+   "london bridge",
+   "falling down"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "old-macdonald",
+  "title": "Old MacDonald",
+  "composer": "Traditional",
+  "emoji": "🚜",
+  "tempoBPM": 100,
+  "notation": "C4 C4 C4 G3 A3 A3 G3:2 E4 E4 D4 D4 C4:2",
+  "aliases": [
+   "old macdonald",
+   "macdonald",
+   "farm",
+   "eieio",
+   "e i e i o"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "lightly-row",
+  "title": "Lightly Row",
+  "composer": "Traditional",
+  "emoji": "🌊",
+  "tempoBPM": 100,
+  "notation": "G4 E4 E4:2 F4 D4 D4:2 C4 D4 E4 F4 G4 G4 G4:2",
+  "aliases": [
+   "lightly row"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "au-clair",
+  "title": "Au Clair de la Lune",
+  "composer": "Traditional French",
+  "emoji": "🌙",
+  "tempoBPM": 84,
+  "notation": "C4 C4 C4 D4 E4:2 D4:2 C4 E4 D4 D4 C4:4",
+  "aliases": [
+   "au clair de la lune",
+   "clair de lune",
+   "pierrot",
+   "moonlight"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "oh-susanna",
+  "title": "Oh! Susanna",
+  "composer": "Stephen Foster",
+  "emoji": "🪕",
+  "tempoBPM": 104,
+  "notation": "C4 D4 E4 G4 G4:1.5 A4:0.5 G4 E4 C4 D4 E4 E4 D4 C4 D4:2",
+  "aliases": [
+   "susanna",
+   "oh susanna",
+   "banjo"
+  ],
+  "license": "Public domain (1848)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "three-blind-mice",
+  "title": "Three Blind Mice",
+  "composer": "Traditional",
+  "emoji": "🐭",
+  "tempoBPM": 100,
+  "notation": "E4 D4 C4:2 E4 D4 C4:2 G4 F4 F4 E4:2 G4 F4 F4 E4:2",
+  "aliases": [
+   "three blind mice",
+   "blind mice",
+   "mice"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "yankee-doodle",
+  "title": "Yankee Doodle",
+  "composer": "Traditional",
+  "emoji": "🎩",
+  "tempoBPM": 108,
+  "notation": "C4 C4 D4 E4 C4 E4 D4 G3 C4 C4 D4 E4 C4:2 B3:2",
+  "aliases": [
+   "yankee doodle",
+   "doodle",
+   "yankee"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "deck-the-halls",
+  "title": "Deck the Halls",
+  "composer": "Traditional Welsh",
+  "emoji": "🎄",
+  "tempoBPM": 104,
+  "notation": "G4:1.5 F4:0.5 E4 D4 C4 D4 E4 C4 D4:0.5 E4:0.5 F4 D4 E4:1.5 D4:0.5 C4 B3 C4:2",
+  "aliases": [
+   "deck the halls",
+   "halls",
+   "holly"
+  ],
+  "license": "Public domain (traditional)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "joy-to-the-world",
+  "title": "Joy to the World",
+  "composer": "George Frideric Handel",
+  "emoji": "🎁",
+  "tempoBPM": 96,
+  "notation": "C5 B4:0.75 A4:0.25 G4:1.5 F4:0.5 E4 D4 C4:2",
+  "aliases": [
+   "joy to the world"
+  ],
+  "license": "Public domain (Handel, d. 1759; Mason arr. 1839)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ },
+ {
+  "id": "fur-elise",
+  "title": "Für Elise (opening)",
+  "composer": "Ludwig van Beethoven",
+  "emoji": "💃",
+  "tempoBPM": 84,
+  "notation": "E5 D#5 E5 D#5 E5 B4 D5 C5 A4:2",
+  "aliases": [
+   "fur elise",
+   "für elise",
+   "elise",
+   "bagatelle"
+  ],
+  "license": "Public domain (Beethoven, d. 1827)",
+  "source": "Transcribed from the public-domain tradition for Piano Pals; verify by ear"
+ }
+]

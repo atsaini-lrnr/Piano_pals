@@ -67,9 +67,17 @@ private struct GrownUpsContent: View {
                 Button("Import MIDI file…") { importing = true }.buttonStyle(.bordered)
             }
             switch app.generation {
-            case .done(let message, let usedFallback):
-                Label(message, systemImage: usedFallback ? "ipad" : "checkmark.circle.fill")
-                    .foregroundStyle(usedFallback ? Color.orange : Color.green)
+            case .added(let message, let lesson):
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(message, systemImage: "checkmark.circle.fill").foregroundStyle(Color.green)
+                    Button("Play “\(lesson.title)” now") {
+                        dismiss()
+                        app.open(lesson)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            case .notFound(let info):
+                NotFoundCard(info: info, app: app)
             case .failed(let message):
                 Label(message, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
             default:
@@ -78,7 +86,7 @@ private struct GrownUpsContent: View {
         } header: {
             Text("Add a song")
         } footer: {
-            Text("Try: “Ode to Joy by Beethoven”, a YouTube link, or notes like “C4 D4 E4 F4 G4 F4 E4 D4 C4:2”. Songs the lesson service doesn't know become a short practice tune made on this iPad.")
+            Text("Try a title (“Ode to Joy”), a YouTube link (only the video's title is read), or notes like “C4 D4 E4 F4 G4 F4 E4 D4 C4:2”. If a song isn't in the free library you'll be offered the closest ones, a MIDI import, or a clearly-labelled practice tune.")
         }
     }
 
@@ -87,7 +95,7 @@ private struct GrownUpsContent: View {
         fieldFocused = false
         Task {
             await app.generateLesson(from: text)
-            if case .done = app.generation { songText = "" }
+            if case .added = app.generation { songText = "" }
         }
     }
 
@@ -238,5 +246,37 @@ private struct DiagnosticRow: View {
                 Text(String(describing: channel.state))
             }
         }
+    }
+}
+
+
+/// Shown when a song isn't in the free library: honest explanation plus real next steps.
+private struct NotFoundCard: View {
+    let info: NotFoundInfo
+    let app: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(info.reason, systemImage: "magnifyingglass").foregroundStyle(Color.orange)
+            if !info.suggestions.isEmpty {
+                Text("Did you mean…").font(.subheadline.weight(.semibold))
+                ForEach(info.suggestions) { song in
+                    Button {
+                        app.addSuggestion(song)
+                    } label: {
+                        HStack {
+                            Text(song.emoji)
+                            Text(song.title)
+                            Spacer()
+                            Image(systemName: "plus.circle.fill")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            Button("Make a practice tune anyway (not the real song)") { app.makePracticeTune(for: info.resolvedTitle ?? info.query) }
+                .buttonStyle(.bordered)
+        }
+        .padding(.vertical, 4)
     }
 }

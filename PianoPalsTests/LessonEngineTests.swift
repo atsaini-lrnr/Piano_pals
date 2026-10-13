@@ -263,52 +263,20 @@ final class ClassifierAndServiceTests: XCTestCase {
         XCTAssertEqual(notes.count, 5)
     }
 
-    func testLibraryMatching() {
-        XCTAssertEqual(SongLibrary.match(title: "twinkle twinkle little star")?.id, "twinkle")
-        XCTAssertEqual(SongLibrary.match(title: "Symphony", composer: "Beethoven")?.id, "ode-to-joy")
-        XCTAssertEqual(SongLibrary.match(title: "mary had a little lamb")?.id, "mary-lamb")
-        XCTAssertNil(SongLibrary.match(title: "Bohemian Rhapsody"))
-    }
+    // MARK: Service
 
-    func testServiceReturnsCloudLesson() async throws {
-        let service = AILessonGeneratorService(transport: MockLessonTransport(latency: .milliseconds(1)))
-        let result = try await service.generateLesson(from: "Ode to Joy by Beethoven")
-        XCTAssertFalse(result.usedFallback)
-        XCTAssertEqual(result.lesson.source, .cloud)
-        XCTAssertEqual(result.lesson.title, "Ode to Joy")
-        XCTAssertEqual(result.lesson.notes.count, 15)
-        XCTAssertTrue(result.lesson.notes.allSatisfy { (1...5).contains($0.assignedFinger) })
-    }
-
-    func testServiceFallsBackWhenCloudDoesNotKnowTheSong() async throws {
-        let service = AILessonGeneratorService(transport: MockLessonTransport(latency: .milliseconds(1)))
-        let result = try await service.generateLesson(from: "Bohemian Rhapsody")
-        XCTAssertTrue(result.usedFallback)
-        XCTAssertEqual(result.lesson.source, .localFallback)
-        XCTAssertFalse(result.lesson.notes.isEmpty)
-        XCTAssertNotNil(result.fallbackReason)
-        // Deterministic: same text → same tune.
-        let again = try await service.generateLesson(from: "Bohemian Rhapsody")
-        XCTAssertEqual(again.lesson.notes, result.lesson.notes)
-        let different = try await service.generateLesson(from: "Another Unknown Song")
-        XCTAssertNotEqual(different.lesson.notes, result.lesson.notes)
-    }
-
-    func testYouTubeLinkFallsBackToPracticeTune() async throws {
-        let service = AILessonGeneratorService(transport: MockLessonTransport(latency: .milliseconds(1)))
-        let result = try await service.generateLesson(from: "https://youtu.be/dQw4w9WgXcQ")
-        XCTAssertTrue(result.usedFallback)
-        XCTAssertGreaterThanOrEqual(result.lesson.notes.count, 10)
-    }
-
-    private struct FailingTransport: LessonTransport {
-        let error: Error
-        func perform(_ request: LessonCloudRequest) async throws -> Data { throw error }
+    private struct StubFetcher: VideoTitleFetching {
+        var result: Result<VideoMetadata, Error>
+        func metadata(forVideoID id: String) async throws -> VideoMetadata { try result.get() }
     }
 
     private struct FixedTransport: LessonTransport {
         let data: Data
         func perform(_ request: LessonCloudRequest) async throws -> Data { data }
+    }
+
+    private struct NotFoundTransport: LessonTransport {
+        func perform(_ request: LessonCloudRequest) async throws -> Data { throw LessonServiceError.notFound }
     }
 
     private struct HangingTransport: LessonTransport {
@@ -318,48 +286,100 @@ final class ClassifierAndServiceTests: XCTestCase {
         }
     }
 
-    func testNetworkErrorFallsBack() async throws {
-        let service = AILessonGeneratorService(transport: FailingTransport(error: URLError(.notConnectedToInternet)))
-        let result = try await service.generateLesson(from: "Jingle Bells")
-        XCTAssertTrue(result.usedFallback)
-        // The on-device library still knows this one, so the fallback is the real song.
-        XCTAssertEqual(result.lesson.title, "Jingle Bells")
+    private func service(transport: LessonTransport? = nil, fetcher: VideoTitleFetching = StubFetcher(result: .failure(URLError(.notConnectedToInternet))),
+                         timeout: Duration = .seconds(2)) -> AILessonGeneratorService {
+        AILessonGeneratorService(transport: transport, library: SongLibrary.all, titleFetcher: fetcher, titleCleaner: nil, timeout: timeout)
     }
 
-    func testMalformedCloudResponsesFallBack() async throws {
+    func testTitleSearchFindsABuiltInSongOffline() async throws {
+        let outcome = try await service().generateLesson(from: "Ode to Joy by Beethoven")
+        guard case .lesson(let lesson, let origin) = outcome else { return XCTFail("expected a lesson") }
+        XCTAssertEqual(lesson.title, "Ode to Joy")
+        XCTAssertEqual(lesson.notes.count, 15)
+        XCTAssertEqual(lesson.source, .library)
+        guard case .library(let score) = origin else { return XCTFail("expected library origin") }
+        XCTAssertGreaterThan(score, 0.8)
+    }
+
+    func testYouTubeLinkUsesTheVideoTitle() async throws {
+        let fetcher = StubFetcher(result: .success(VideoMetadata(title: "Hot Cross Buns | Easy Piano Tutorial (Official Video)", author: "Some Channel")))
+        let outcome = try await service(fetcher: fetcher).generateLesson(from: "https://youtu.be/dQw4w9WgXcQ")
+        guard case .lesson(let lesson, _) = outcome else { return XCTFail("expected a lesson") }
+        XCTAssertEqual(lesson.title, "Hot Cross Buns")
+    }
+
+    func testYouTubeWithUnknownSongIsHonestAboutIt() async throws {
+        let fetcher = StubFetcher(result: .success(VideoMetadata(title: "Bohemian Rhapsody (Official Video Remastered)", author: "Queen Official")))
+        let outcome = try await service(fetcher: fetcher).generateLesson(from: "https://youtu.be/dQw4w9WgXcQ")
+        guard case .notFound(let info) = outcome else { return XCTFail("must not invent a song") }
+        XCTAssertNotNil(info.resolvedTitle)
+        XCTAssertTrue(info.reason.contains("isn't in the free song library"))
+    }
+
+    func testOfflineYouTubeLookupFailsGracefully() async throws {
+        let outcome = try await service().generateLesson(from: "https://youtu.be/dQw4w9WgXcQ")
+        guard case .notFound(let info) = outcome else { return XCTFail("expected not found") }
+        XCTAssertNil(info.resolvedTitle)
+        XCTAssertFalse(info.reason.isEmpty)
+    }
+
+    func testUnknownTitleOffersCloseSuggestionsButNoInventedTune() async throws {
+        let outcome = try await service().generateLesson(from: "Jingle Bell Rock")
+        guard case .notFound(let info) = outcome else { return XCTFail("a different song must not be shown") }
+        XCTAssertTrue(info.suggestions.contains { $0.id == "jingle-bells" }, "the similar built-in song is offered as a suggestion")
+    }
+
+    func testComposerOnlyQueryIsASuggestionNotAMatch() async throws {
+        let outcome = try await service().generateLesson(from: "Beethoven")
+        guard case .notFound(let info) = outcome else { return XCTFail("composer-only is ambiguous") }
+        XCTAssertEqual(Set(info.suggestions.map(\.id)), ["ode-to-joy", "fur-elise"])
+    }
+
+    func testExplicitPracticeTuneIsDeterministicAndLabelled() {
+        let service = service()
+        let a = service.practiceTune(for: "Bohemian Rhapsody", hand: .right)
+        let b = service.practiceTune(for: "Bohemian Rhapsody", hand: .right)
+        let c = service.practiceTune(for: "Something Else", hand: .right)
+        XCTAssertEqual(a.notes, b.notes)
+        XCTAssertNotEqual(a.notes, c.notes)
+        XCTAssertTrue(a.title.hasPrefix("Practice tune"))
+        XCTAssertTrue(a.sourceDescription.contains("wasn't found") || a.sourceDescription.contains("practice tune"))
+    }
+
+    func testCloudIsOnlyAskedAfterTheIndexMisses() async throws {
+        let body = #"{"title":"Custom","composer":"Me","tempoBPM":70,"notes":[{"timestamp":0,"duration":1,"noteNumber":60,"assignedFinger":1},{"timestamp":1,"duration":1,"noteNumber":62,"assignedFinger":2}]}"#
+        let svc = service(transport: FixedTransport(data: Data(body.utf8)))
+        // Known song: index wins (the transport would have returned "Custom").
+        guard case .lesson(let known, _) = try await svc.generateLesson(from: "Twinkle Twinkle") else { return XCTFail() }
+        XCTAssertEqual(known.title, "Twinkle Twinkle")
+        // Unknown song: the endpoint is asked.
+        guard case .lesson(let custom, let origin) = try await svc.generateLesson(from: "Some Obscure Tune") else { return XCTFail("endpoint should answer") }
+        XCTAssertEqual(custom.title, "Custom")
+        XCTAssertEqual(origin, .cloud)
+    }
+
+    func testBadCloudResponsesBecomeNotFound() async throws {
         let responses = [
-            "not json",
-            #"{"title":"x","notes":[]}"#,
+            "not json", #"{"title":"x","notes":[]}"#,
             #"{"title":"x","notes":[{"timestamp":0,"duration":1,"noteNumber":60,"assignedFinger":9}]}"#,
             #"{"title":"x","notes":[{"timestamp":0,"duration":1,"noteNumber":10,"assignedFinger":2}]}"#
         ]
         for body in responses {
-            let service = AILessonGeneratorService(transport: FixedTransport(data: Data(body.utf8)))
-            let result = try await service.generateLesson(from: "Ode to Joy")
-            XCTAssertTrue(result.usedFallback, body)
+            let outcome = try await service(transport: FixedTransport(data: Data(body.utf8))).generateLesson(from: "Some Obscure Tune")
+            guard case .notFound = outcome else { return XCTFail("bad payload must not become a lesson: \(body)") }
         }
+        guard case .notFound = try await service(transport: NotFoundTransport()).generateLesson(from: "Some Obscure Tune") else { return XCTFail() }
     }
 
-    func testWellFormedCustomResponseIsUsed() async throws {
-        let body = #"{"title":"Custom","composer":"Me","tempoBPM":70,"notes":[{"timestamp":0,"duration":1,"noteNumber":60,"assignedFinger":1},{"timestamp":1,"duration":1,"noteNumber":62,"assignedFinger":2}]}"#
-        let service = AILessonGeneratorService(transport: FixedTransport(data: Data(body.utf8)))
-        let result = try await service.generateLesson(from: "anything")
-        XCTAssertFalse(result.usedFallback)
-        XCTAssertEqual(result.lesson.title, "Custom")
-        XCTAssertEqual(result.lesson.notes.count, 2)
-    }
-
-    func testTimeoutFallsBack() async throws {
-        let service = AILessonGeneratorService(transport: HangingTransport(), timeout: .milliseconds(50))
-        let result = try await service.generateLesson(from: "Ode to Joy")
-        XCTAssertTrue(result.usedFallback)
-        XCTAssertEqual(result.fallbackReason, LessonServiceError.timedOut.errorDescription)
+    func testCloudTimeoutBecomesNotFound() async throws {
+        let outcome = try await service(transport: HangingTransport(), timeout: .milliseconds(50)).generateLesson(from: "Some Obscure Tune")
+        guard case .notFound(let info) = outcome else { return XCTFail("expected not found") }
+        XCTAssertTrue(info.reason.contains("too long"))
     }
 
     func testEmptyInputThrows() async {
-        let service = AILessonGeneratorService(transport: MockLessonTransport(latency: .milliseconds(1)))
         do {
-            _ = try await service.generateLesson(from: "   ")
+            _ = try await service().generateLesson(from: "   ")
             XCTFail("should throw")
         } catch {
             XCTAssertEqual(error as? LessonServiceError, .emptyInput)
@@ -367,10 +387,26 @@ final class ClassifierAndServiceTests: XCTestCase {
     }
 
     func testRawNotesNeverTouchTheNetwork() async throws {
-        let service = AILessonGeneratorService(transport: FailingTransport(error: URLError(.cannotConnectToHost)))
-        let result = try await service.generateLesson(from: "C4 D4 E4 F4 G4")
-        XCTAssertFalse(result.usedFallback)
-        XCTAssertEqual(result.lesson.notes.map(\.assignedFinger), [1, 2, 3, 4, 5])
+        let outcome = try await service(transport: NotFoundTransport()).generateLesson(from: "C4 D4 E4 F4 G4")
+        guard case .lesson(let lesson, let origin) = outcome else { return XCTFail() }
+        XCTAssertEqual(origin, .notation)
+        XCTAssertEqual(lesson.notes.map(\.assignedFinger), [1, 2, 3, 4, 5])
+    }
+
+    func testOEmbedRequestAndDecoding() throws {
+        let url = try XCTUnwrap(YouTubeOEmbedFetcher.requestURL(forVideoID: "dQw4w9WgXcQ"))
+        XCTAssertEqual(url.host, "www.youtube.com")
+        XCTAssertEqual(url.path, "/oembed")
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(query.first { $0.name == "url" }?.value, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        XCTAssertEqual(query.first { $0.name == "format" }?.value, "json")
+        // Only a public URL is sent: no audio, no device identifiers.
+        XCTAssertEqual(query.count, 2)
+
+        let meta = try YouTubeOEmbedFetcher.decode(Data(#"{"title":"  Twinkle  ","author_name":"Chan","type":"video"}"#.utf8))
+        XCTAssertEqual(meta, VideoMetadata(title: "Twinkle", author: "Chan"))
+        XCTAssertThrowsError(try YouTubeOEmbedFetcher.decode(Data(#"{"title":" "}"#.utf8)))
+        XCTAssertThrowsError(try YouTubeOEmbedFetcher.decode(Data("nope".utf8)))
     }
 
     func testLocalScaleAndPracticeTune() {

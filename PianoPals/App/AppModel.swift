@@ -15,7 +15,8 @@ final class AppModel: ObservableObject {
     enum GenerationState: Equatable {
         case idle
         case working
-        case done(message: String, usedFallback: Bool)
+        case added(message: String, lesson: Lesson)
+        case notFound(NotFoundInfo)
         case failed(String)
     }
 
@@ -43,7 +44,8 @@ final class AppModel: ObservableObject {
     private var demoTask: Task<Void, Never>?
     private var hitCounter = 0
 
-    init(settings: AppSettings = AppSettings(), generator: LessonGenerating = AILessonGeneratorService(transport: MockLessonTransport())) {
+    init(settings: AppSettings = AppSettings(),
+         generator: LessonGenerating = AILessonGeneratorService(transport: MockLessonTransport(latency: .milliseconds(300)), titleCleaner: OnDeviceTitleCleaner())) {
         self.settings = settings
         self.generator = generator
         self.songs = SongLibrary.all.map { $0.lesson(hand: settings.lessonHand) }
@@ -153,17 +155,44 @@ final class AppModel: ObservableObject {
     func generateLesson(from text: String) async {
         generation = .working
         do {
-            let result = try await generator.generateLesson(from: text, hand: settings.lessonHand)
-            songs.insert(result.lesson, at: 0)
-            let message = result.usedFallback
-                ? "Added “\(result.lesson.title)” (made on this iPad: \(result.fallbackReason ?? "offline"))."
-                : "Added “\(result.lesson.title)”."
-            generation = .done(message: message, usedFallback: result.usedFallback)
+            switch try await generator.generateLesson(from: text, hand: settings.lessonHand) {
+            case .lesson(let lesson, let origin):
+                add(lesson)
+                let how: String
+                switch origin {
+                case .library: how = "found in the free song library"
+                case .cloud: how = "from the lesson service"
+                case .notation: how = "fingered on this iPad"
+                }
+                generation = .added(message: "Added “\(lesson.title)” (\(how)).", lesson: lesson)
+            case .notFound(let info):
+                generation = .notFound(info)
+            }
         } catch is CancellationError {
             generation = .idle
         } catch {
             generation = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+
+    /// Adds a library suggestion the grown-up picked from the not-found card.
+    func addSuggestion(_ song: LibrarySong) {
+        let lesson = song.lesson(hand: settings.lessonHand)
+        add(lesson)
+        generation = .added(message: "Added “\(lesson.title)”.", lesson: lesson)
+    }
+
+    /// An explicit, clearly-labelled practice tune (never presented as the real song).
+    func makePracticeTune(for text: String) {
+        let lesson = LocalLessonEngine().practiceTune(seed: text, label: text, hand: settings.lessonHand)
+        add(lesson)
+        generation = .added(message: "Added “\(lesson.title)”. This is a practice tune, not the real song.", lesson: lesson)
+    }
+
+    /// Adds a lesson to the top of the song list, replacing an older entry with the same title.
+    func add(_ lesson: Lesson) {
+        songs.removeAll { $0.title == lesson.title }
+        songs.insert(lesson, at: 0)
     }
 
     func importMIDIFile(at url: URL) {
@@ -177,8 +206,8 @@ final class AppModel: ObservableObject {
             let lesson = engine.lesson(title: title, rawNotes: raw, hand: settings.lessonHand, source: .imported,
                                        description: "Imported MIDI file, fingered on this iPad", emoji: "📁")
             guard !lesson.notes.isEmpty else { throw MIDIFileError.noNotes }
-            songs.insert(lesson, at: 0)
-            generation = .done(message: "Added “\(title)” from the MIDI file.", usedFallback: false)
+            add(lesson)
+            generation = .added(message: "Added “\(title)” from the MIDI file.", lesson: lesson)
         } catch {
             generation = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }

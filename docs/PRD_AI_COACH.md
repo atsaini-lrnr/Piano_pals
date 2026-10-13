@@ -71,6 +71,13 @@ Legend: ✅ met & automatically verified · 🟡 built, **needs on-device measur
 **F9** Summary after each lesson: first-try accuracy, finger accuracy, weakest finger, stars, minutes. Stored locally (last 30). Parent sees it in Grown-ups ▸ Progress.
 **F10** One-Euro filter per joint; finger attribution votes over ≈ 150 ms of frames; latency and verified-rate shown in Diagnostics.
 
+## 5b. Proposed (not yet built — need your decision)
+| # | Feature | Notes |
+|---|---|---|
+| P1 | **Posture coaching with Apple's body-pose model** (`VNDetectHumanBodyPoseRequest`) | Deterministic Apple framework, on-device. Detects slouching / raised shoulders / collapsed wrists from the side camera; also helps assign left/right when only part of a hand is visible. Does not replace hand pose for fingers. |
+| P2 | **"What song is this?" with ShazamKit** | Identifies a song playing in the room → title → matched against the free library. **Gives a title only, never notes.** Needs the ShazamKit App Service capability on your App ID and network; a *signature* (fingerprint), not the raw audio, goes to Apple → must be an explicit per-use opt-in to respect principle 1. |
+| — | Video encode/decode | **Not needed.** The app never records or stores video; it reads live frames only (AVFoundation). No model involved. |
+
 ## 6. Out of scope / honest limits
 * Bundled songs are public-domain tunes transcribed from the tradition; **please report any wrong note** (they can't be checked against a score by me).
 * Modern pop melodies are copyrighted: there's no free legal database. Listen mode and MIDI import are the legal routes.

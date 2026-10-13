@@ -191,25 +191,10 @@ struct LocalLessonEngine: Sendable {
                notes: FingeringEngine.assign(rawNotes, hand: hand), source: source, sourceDescription: description, emoji: emoji)
     }
 
-    /// Builds the best lesson it can for `kind` without any network access.
-    func lesson(for kind: LessonInputKind, hand: HandSide) -> Lesson {
-        switch kind {
-        case .rawNotes(let notes):
-            return lesson(title: "My Notes", rawNotes: notes, hand: hand, source: .imported,
-                          description: "Fingered on this iPad from the notes you typed", emoji: "✍️")
-        case .titleSearch(let title, let composer):
-            if let song = SongLibrary.match(title: title, composer: composer) {
-                return song.lesson(hand: hand, source: .library)
-            }
-            return practiceTune(seed: [title, composer ?? ""].joined(separator: "|"), label: title, hand: hand)
-        case .musicShare(let title, let artist, _):
-            if let song = SongLibrary.match(title: title, composer: artist) {
-                return song.lesson(hand: hand, source: .library)
-            }
-            return practiceTune(seed: [title, artist ?? ""].joined(separator: "|"), label: title, hand: hand)
-        case .youTube(let videoID):
-            return practiceTune(seed: "yt:" + videoID, label: "Video \(videoID.prefix(4))", hand: hand)
-        }
+    /// A lesson from notation the user typed. (Songs are looked up in the index; unknown songs are never invented here.)
+    func lesson(fromNotation notes: [RawNote], hand: HandSide) -> Lesson {
+        lesson(title: "My Notes", rawNotes: notes, hand: hand, source: .imported,
+               description: "Fingered on this iPad from the notes you typed", emoji: "✍️")
     }
 
     /// A short, deterministic five-finger melody seeded from `seed`: the same text always gives the same tune.
@@ -274,54 +259,116 @@ struct SeededGenerator: RandomNumberGenerator {
 
 // MARK: - Service
 
+enum LessonOrigin: Equatable, Sendable {
+    /// Found in the bundled public-domain index (offline).
+    case library(score: Double)
+    /// Returned by the optional lesson endpoint.
+    case cloud
+    /// Built from notation the user typed.
+    case notation
+}
+
+/// Returned when we can't honestly provide the song. Nothing is made up; the user chooses what to do next.
+struct NotFoundInfo: Equatable, Sendable {
+    var query: String
+    /// The title we read from a link or share text, when we got that far.
+    var resolvedTitle: String?
+    var reason: String
+    var suggestions: [LibrarySong]
+}
+
+enum LessonGenerationOutcome: Equatable, Sendable {
+    case lesson(Lesson, origin: LessonOrigin)
+    case notFound(NotFoundInfo)
+}
+
 protocol LessonGenerating: Sendable {
-    func generateLesson(from text: String, hand: HandSide) async throws -> LessonGenerationResult
+    func generateLesson(from text: String, hand: HandSide) async throws -> LessonGenerationOutcome
 }
 
-struct LessonGenerationResult: Equatable, Sendable {
-    var lesson: Lesson
-    var usedFallback: Bool
-    /// Why the fallback was used, when it was (for the grown-ups panel).
-    var fallbackReason: String?
-}
-
-/// Pipeline interface: classify → send to the cloud → validate → (on any failure) fall back on-device.
+/// Pipeline: classify → read the title (links) → clean it → search the offline index → (optionally) ask the endpoint →
+/// otherwise say honestly that we couldn't find it, with suggestions.
 struct AILessonGeneratorService: LessonGenerating {
-    var transport: LessonTransport
+    /// Optional lesson endpoint (cloud simulation / future server). Not needed for the built-in songs.
+    var transport: LessonTransport?
+    var library: [LibrarySong] = SongLibrary.all
+    var titleFetcher: VideoTitleFetching = YouTubeOEmbedFetcher()
+    var titleCleaner: TitleCleaning?
     var localEngine = LocalLessonEngine()
     var timeout: Duration = .seconds(15)
     var maxNotes = 400
 
-    func generateLesson(from text: String, hand: HandSide = .right) async throws -> LessonGenerationResult {
+    func generateLesson(from text: String, hand: HandSide = .right) async throws -> LessonGenerationOutcome {
         guard let kind = LessonInputClassifier.classify(text) else { throw LessonServiceError.emptyInput }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Raw notation never needs the cloud.
-        if case .rawNotes = kind {
-            return LessonGenerationResult(lesson: localEngine.lesson(for: kind, hand: hand), usedFallback: false, fallbackReason: nil)
+        // 1. Notation never needs a lookup.
+        if case .rawNotes(let notes) = kind {
+            return .lesson(localEngine.lesson(fromNotation: notes, hand: hand), origin: .notation)
         }
 
-        do {
-            let request = makeRequest(kind: kind, text: text, hand: hand)
-            let data = try await withTimeout(timeout) { try await transport.perform(request) }
-            let lesson = try decodeAndValidate(data, request: request, hand: hand)
-            return LessonGenerationResult(lesson: lesson, usedFallback: false, fallbackReason: nil)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            return LessonGenerationResult(lesson: localEngine.lesson(for: kind, hand: hand), usedFallback: true, fallbackReason: reason)
+        // 2. Work out what the song is called.
+        var title: String
+        var artist: String?
+        switch kind {
+        case .youTube(let id):
+            do {
+                let metadata = try await titleFetcher.metadata(forVideoID: id)
+                title = metadata.title
+                artist = metadata.author
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let reason = (error as? LocalizedError)?.errorDescription ?? "Couldn't read the video's title (is the iPad online?)."
+                return .notFound(NotFoundInfo(query: trimmed, resolvedTitle: nil, reason: reason, suggestions: []))
+            }
+        case .musicShare(let t, let a, _):
+            title = t
+            artist = a
+        case .titleSearch(let t, let c):
+            title = t
+            artist = c
+        case .rawNotes:
+            return .notFound(NotFoundInfo(query: trimmed, resolvedTitle: nil, reason: "No notes found.", suggestions: []))
         }
+        if let cleaner = titleCleaner, let cleaned = await cleaner.cleanedTitle(from: title) { title = cleaned + " " + (artist ?? "") }
+        let query = [title, artist ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces)
+
+        // 3. Offline index.
+        if let match = SongMatcher.bestMatch(query: query, in: library) {
+            return .lesson(match.song.lesson(hand: hand, source: .library), origin: .library(score: match.score))
+        }
+
+        // 4. Optional endpoint.
+        var reason = "“\(title)” isn't in the free song library yet."
+        if let transport {
+            do {
+                let request = makeRequest(kind: kind, text: trimmed, title: title, artist: artist, hand: hand)
+                let data = try await withTimeout(timeout) { try await transport.perform(request) }
+                return .lesson(try decodeAndValidate(data, request: request, hand: hand), origin: .cloud)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as LessonServiceError where error == .notFound {
+                // fall through to the honest not-found
+            } catch {
+                reason += " (The lesson service said: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription))"
+            }
+        }
+
+        // 5. Honest not-found with the closest real songs.
+        let suggestions = SongMatcher.rank(query: query, in: library).prefix(3).map(\.song)
+        return .notFound(NotFoundInfo(query: trimmed, resolvedTitle: title, reason: reason, suggestions: Array(suggestions)))
     }
 
-    func makeRequest(kind: LessonInputKind, text: String, hand: HandSide) -> LessonCloudRequest {
-        var request = LessonCloudRequest(kind: kind.wireName, query: text.trimmingCharacters(in: .whitespacesAndNewlines),
-                                         videoID: nil, title: nil, artist: nil, hand: hand.rawValue, maxNotes: maxNotes)
-        switch kind {
-        case .youTube(let id): request.videoID = id
-        case .musicShare(let title, let artist, _): request.title = title; request.artist = artist
-        case .titleSearch(let title, let composer): request.title = title; request.artist = composer
-        case .rawNotes: break
-        }
+    /// An explicit, opt-in practice tune (clearly not the real song).
+    func practiceTune(for text: String, hand: HandSide) -> Lesson {
+        localEngine.practiceTune(seed: text, label: text, hand: hand)
+    }
+
+    func makeRequest(kind: LessonInputKind, text: String, title: String, artist: String?, hand: HandSide) -> LessonCloudRequest {
+        var request = LessonCloudRequest(kind: kind.wireName, query: text, videoID: nil, title: title, artist: artist,
+                                         hand: hand.rawValue, maxNotes: maxNotes)
+        if case .youTube(let id) = kind { request.videoID = id }
         return request
     }
 

@@ -1,7 +1,7 @@
 import Foundation
 
-/// A bundled beginner song, stored as note-name notation and fingered on demand by `FingeringEngine`.
-struct LibrarySong: Identifiable, Equatable, Sendable {
+/// A bundled public-domain song, stored as note-name notation and fingered on demand by `FingeringEngine`.
+struct LibrarySong: Identifiable, Equatable, Sendable, Codable {
     let id: String
     let title: String
     let composer: String
@@ -10,6 +10,10 @@ struct LibrarySong: Identifiable, Equatable, Sendable {
     let notation: String
     /// Lower-case phrases that should match this song in a text search.
     let aliases: [String]
+    /// Licence / public-domain basis for the melody.
+    let license: String
+    /// Where the transcription came from.
+    let source: String
 
     func lesson(hand: HandSide = .right, source: Lesson.Source = .library) -> Lesson {
         let raw = NoteNameParser.parse(notation, bpm: tempoBPM) ?? []
@@ -28,57 +32,27 @@ struct LibrarySong: Identifiable, Equatable, Sendable {
 }
 
 enum SongLibrary {
-    static let all: [LibrarySong] = [
-        LibrarySong(
-            id: "five-finger-walk", title: "Five Finger Walk", composer: "Warm-up", emoji: "🐛", tempoBPM: 80,
-            notation: "C4 D4 E4 F4 G4 F4 E4 D4 C4:2",
-            aliases: ["five finger", "warm up", "scale", "c major scale", "walk"]),
-        LibrarySong(
-            id: "twinkle", title: "Twinkle Twinkle", composer: "Traditional", emoji: "⭐", tempoBPM: 84,
-            notation: "C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2",
-            aliases: ["twinkle", "little star", "ah vous dirai-je", "ah vous dirai je", "alphabet song", "abc song", "mozart"]),
-        LibrarySong(
-            id: "mary-lamb", title: "Mary Had a Little Lamb", composer: "Traditional", emoji: "🐑", tempoBPM: 92,
-            notation: "E4 D4 C4 D4 E4 E4 E4:2 D4 D4 D4:2 E4 G4 G4:2 E4 D4 C4 D4 E4 E4 E4 E4 D4 D4 E4 D4 C4:4",
-            aliases: ["mary", "lamb", "little lamb"]),
-        LibrarySong(
-            id: "hot-cross-buns", title: "Hot Cross Buns", composer: "Traditional", emoji: "🥐", tempoBPM: 88,
-            notation: "E4 D4 C4:2 E4 D4 C4:2 C4 C4 C4 C4 D4 D4 D4 D4 E4 D4 C4:2",
-            aliases: ["hot cross", "buns"]),
-        LibrarySong(
-            id: "ode-to-joy", title: "Ode to Joy", composer: "Ludwig van Beethoven", emoji: "🎉", tempoBPM: 96,
-            notation: "E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4:1.5 D4:0.5 D4:2",
-            aliases: ["ode", "joy", "beethoven", "ninth symphony", "9th symphony"]),
-        LibrarySong(
-            id: "jingle-bells", title: "Jingle Bells", composer: "James Lord Pierpont", emoji: "🔔", tempoBPM: 100,
-            notation: "E4 E4 E4:2 E4 E4 E4:2 E4 G4 C4:1.5 D4:0.5 E4:4",
-            aliases: ["jingle", "bells", "pierpont", "christmas"]),
-        LibrarySong(
-            id: "row-boat", title: "Row Your Boat", composer: "Traditional", emoji: "🚣", tempoBPM: 100,
-            notation: "C4 C4 C4:0.75 D4:0.25 E4 E4:0.75 D4:0.25 E4:0.75 F4:0.25 G4:2",
-            aliases: ["row row", "row your boat", "boat", "gently down the stream"])
-    ]
+    /// Songs from the bundled `SongIndex.json` (curated + anything added by `tools/build_song_index.py`).
+    static let all: [LibrarySong] = load()
 
-    /// Best match for a free-text query (title and/or composer), or nil.
-    static func match(title: String, composer: String? = nil, in songs: [LibrarySong] = all) -> LibrarySong? {
-        let haystack = normalize([title, composer ?? ""].joined(separator: " "))
-        guard !haystack.isEmpty else { return nil }
-        var best: (song: LibrarySong, score: Int)?
-        for song in songs {
-            var score = 0
-            let songTitle = normalize(song.title)
-            if haystack.contains(songTitle) { score += 10 }
-            for alias in song.aliases where haystack.contains(normalize(alias)) {
-                score += 4 + alias.count / 4
+    static func load(bundle: Bundle = .main) -> [LibrarySong] {
+        let candidates = [bundle, Bundle(for: BundleToken.self)]
+        for candidate in candidates {
+            if let url = candidate.url(forResource: "SongIndex", withExtension: "json"),
+               let data = try? Data(contentsOf: url),
+               let songs = try? JSONDecoder().decode([LibrarySong].self, from: data), !songs.isEmpty {
+                return songs
             }
-            if score > 0, score > (best?.score ?? 0) { best = (song, score) }
         }
-        return best?.song
+        return []
     }
 
-    static func normalize(_ text: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(.whitespaces)
-        let cleaned = text.lowercased().unicodeScalars.map { allowed.contains($0) ? Character($0) : " " }
-        return String(cleaned).split(separator: " ").joined(separator: " ")
+    /// Best match for a free-text query (title and/or composer), or nil when nothing is a convincing match.
+    static func match(title: String, composer: String? = nil, in songs: [LibrarySong] = all) -> LibrarySong? {
+        SongMatcher.bestMatch(query: [title, composer ?? ""].joined(separator: " "), in: songs)?.song
     }
+
+    static func normalize(_ text: String) -> String { SongMatcher.normalize(text) }
+
+    private final class BundleToken {}
 }
