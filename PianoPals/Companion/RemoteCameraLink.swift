@@ -5,7 +5,7 @@ import UIKit
 
 /// iPad side: finds iPhones in camera mode on the local network, connects with the pairing code, and delivers the iPhone's
 /// hand frames and preview picture, with timestamps converted onto the iPad's clock.
-final class RemoteCameraLink: NSObject, ObservableObject {
+final class RemoteCameraLink: NSObject, ObservableObject, @unchecked Sendable {
     struct NearbyPhone: Identifiable, Equatable {
         let id: String
         let name: String

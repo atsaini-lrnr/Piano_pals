@@ -10,57 +10,79 @@ final class ToneSynth {
     private var nextPlayer = 0
     private var cache: [Int: AVAudioPCMBuffer] = [:]
     private var notificationTokens: [NSObjectProtocol] = []
+    /// Set on the main thread once the engine is running.
     private(set) var isAvailable = false
+    /// Audio-session and engine start-up can block for tens of milliseconds, so they never run on the main thread.
+    private let audioQueue = DispatchQueue(label: "pianopals.audio.setup", qos: .userInitiated)
+    private var isStarting = false
 
     private static let voiceCount = 12
 
     func start() {
-        guard !isAvailable else { return }
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
-            try session.setActive(true)
-        } catch {
-            return
+        guard !isAvailable, !isStarting else { return }
+        isStarting = true
+        audioQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                try session.setActive(true)
+            } catch {
+                DispatchQueue.main.async { self.isStarting = false }
+                return
+            }
+            var created: [AVAudioPlayerNode] = []
+            for _ in 0..<ToneSynth.voiceCount {
+                let player = AVAudioPlayerNode()
+                self.engine.attach(player)
+                self.engine.connect(player, to: self.engine.mainMixerNode, format: self.format)
+                created.append(player)
+            }
+            self.engine.mainMixerNode.outputVolume = 0.9
+            let started = (try? self.engine.start()) != nil
+            DispatchQueue.main.async {
+                self.players = created
+                self.isAvailable = started
+                self.isStarting = false
+                self.observeAudioEvents()
+            }
         }
-        for _ in 0..<ToneSynth.voiceCount {
-            let player = AVAudioPlayerNode()
-            engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: format)
-            players.append(player)
-        }
-        engine.mainMixerNode.outputVolume = 0.9
-        do {
-            try engine.start()
-            isAvailable = true
-        } catch {
-            isAvailable = false
-        }
+    }
+
+    private func observeAudioEvents() {
+        guard notificationTokens.isEmpty else { return }
         let center = NotificationCenter.default
-        notificationTokens.append(center.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
-            guard let self, !self.engine.isRunning else { return }
-            try? self.engine.start()
+        notificationTokens.append(center.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
+            self?.audioQueue.async {
+                guard let self, !self.engine.isRunning else { return }
+                try? self.engine.start()
+            }
         })
-        notificationTokens.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
-            guard let self,
-                  let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+        notificationTokens.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                   AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
-            try? AVAudioSession.sharedInstance().setActive(true)
-            try? self.engine.start()
+            self?.audioQueue.async {
+                guard let self else { return }
+                try? AVAudioSession.sharedInstance().setActive(true)
+                try? self.engine.start()
+            }
         })
     }
 
     /// Call after another feature (e.g. microphone listening) has changed the audio session.
     func restoreSession() {
         guard isAvailable else { return }
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
-        if !engine.isRunning { try? engine.start() }
+        audioQueue.async { [weak self] in
+            guard let self else { return }
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try? AVAudioSession.sharedInstance().setActive(true)
+            if !self.engine.isRunning { try? self.engine.start() }
+        }
     }
 
     func play(note: Int, velocity: Int = 90) {
         guard isAvailable, (21...108).contains(note) else { return }
-        if !engine.isRunning { try? engine.start() }
+        if !engine.isRunning { audioQueue.async { [engine] in try? engine.start() } }
         let buffer = cache[note] ?? render(note: note)
         cache[note] = buffer
         let player = players[nextPlayer]

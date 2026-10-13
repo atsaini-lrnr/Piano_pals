@@ -44,11 +44,20 @@ final class ListenRecorder: ObservableObject {
         let granted = await ListenRecorder.requestPermission()
         guard granted else { state = .denied; return }
 
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
-            try session.setActive(true)
-        } catch {
+        // Changing the audio session can block, so it happens off the main thread.
+        let sessionReady: Bool = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let session = AVAudioSession.sharedInstance()
+                    try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker])
+                    try session.setActive(true)
+                    continuation.resume(returning: true)
+                } catch {
+                    continuation.resume(returning: false)
+                }
+            }
+        }
+        guard sessionReady else {
             state = .failed("The microphone isn't available right now.")
             return
         }
@@ -97,7 +106,7 @@ final class ListenRecorder: ObservableObject {
             }
         }
         pipeline.withLock { $0 = nil }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        DispatchQueue.global(qos: .utility).async { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
         state = .idle
         liveNote = nil
         level = 0

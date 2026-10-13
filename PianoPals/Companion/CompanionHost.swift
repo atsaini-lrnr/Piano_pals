@@ -5,7 +5,7 @@ import UIKit
 
 /// iPhone side: shows a pairing code, advertises itself on the local network, and streams hand landmarks + a small
 /// preview to the paired iPad over an encrypted connection.
-final class CompanionHost: NSObject, ObservableObject {
+final class CompanionHost: NSObject, ObservableObject, @unchecked Sendable {
     enum State: Equatable {
         case stopped
         case waiting
