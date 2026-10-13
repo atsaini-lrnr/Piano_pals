@@ -19,6 +19,7 @@ private struct GrownUpsContent: View {
 
     @State private var songText = ""
     @State private var importing = false
+    @State private var listening = false
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -36,6 +37,7 @@ private struct GrownUpsContent: View {
             .navigationTitle("Grown-ups")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .sheet(isPresented: $listening) { ListenView(app: app) }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.midi]) { result in
                 if case .success(let url) = result { app.importMIDIFile(at: url) }
             }
@@ -65,7 +67,8 @@ private struct GrownUpsContent: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(songText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || app.generation == .working)
                 Spacer()
-                Button("Import MIDI file…") { importing = true }.buttonStyle(.bordered)
+                Button("Listen to a song…") { listening = true }.buttonStyle(.bordered)
+                Button("Import MIDI…") { importing = true }.buttonStyle(.bordered)
             }
             switch app.generation {
             case .added(let message, let lesson):
@@ -233,6 +236,17 @@ private struct GrownUpsContent: View {
                 DiagnosticRow(channel: cameras.channel(id), id: id)
             }
             LabeledContent("MIDI notes received", value: "\(midi.eventCount)")
+            LabeledContent("Key → reaction (median / slowest 5%)") {
+                if let p50 = app.diagnostics.latencyP50, let p95 = app.diagnostics.latencyP95 {
+                    Text(String(format: "%.0f / %.0f ms (%d notes)", p50, p95, app.diagnostics.samples))
+                        .foregroundStyle(p95 <= 150 ? Color.green : Color.orange)
+                } else { Text("play a song to measure") }
+            }
+            LabeledContent("Finger seen by camera") {
+                if let rate = app.diagnostics.fingerVerifiedRate {
+                    Text("\(Int((rate * 100).rounded()))% of notes").foregroundStyle(rate >= 0.8 ? Color.green : Color.orange)
+                } else { Text("play a song to measure") }
+            }
             Toggle("Demo hands (no camera needed)", isOn: $settings.demoHands)
             if settings.demoHands { Toggle("Demo hand uses the wrong finger", isOn: $settings.demoWrongFinger) }
         } header: { Text("Diagnostics") } footer: {
@@ -305,6 +319,7 @@ private struct NotFoundCard: View {
                     .buttonStyle(.bordered)
                 }
             }
+            Text("You can also play or hum it near the iPad (Listen to a song…) or import a MIDI file.").font(.footnote).foregroundStyle(.secondary)
             Button("Make a practice tune anyway (not the real song)") { app.makePracticeTune(for: info.resolvedTitle ?? info.query) }
                 .buttonStyle(.bordered)
         }

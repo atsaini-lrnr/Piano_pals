@@ -68,6 +68,8 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var lastPublishTime: TimeInterval = 0
     private var lastFaceTime: TimeInterval = 0
     private var targetFPS = 60.0
+    /// Only touched on `outputQueue`.
+    private var smoother = HandSmoother()
 
     init(id: CameraChannelID) {
         self.id = id
@@ -99,6 +101,7 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         config.withLock { $0.mirrored = mirroredByDefault != flipHorizontally }
         setupRotationCoordinator(for: device)
 
+        outputQueue.async { [weak self] in self?.smoother.reset() }
         sessionQueue.async { [weak self] in
             guard let self else { return }
             do {
@@ -277,7 +280,8 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let detectFace = settings.detectFace && timestamp - lastFaceTime >= 0.12
         if detectFace { lastFaceTime = timestamp }
 
-        let result = processor.process(pixelBuffer: pixelBuffer, timestamp: timestamp, mirrored: settings.mirrored, detectFace: detectFace)
+        var result = processor.process(pixelBuffer: pixelBuffer, timestamp: timestamp, mirrored: settings.mirrored, detectFace: detectFace)
+        result.hands = smoother.smooth(result.hands)
         onHandFrame?(result.hands)
 
         // Publish to SwiftUI at most ~30 times a second.

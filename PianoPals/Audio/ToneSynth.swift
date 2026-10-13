@@ -50,6 +50,14 @@ final class ToneSynth {
         })
     }
 
+    /// Call after another feature (e.g. microphone listening) has changed the audio session.
+    func restoreSession() {
+        guard isAvailable else { return }
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+        if !engine.isRunning { try? engine.start() }
+    }
+
     func play(note: Int, velocity: Int = 90) {
         guard isAvailable, (21...108).contains(note) else { return }
         if !engine.isRunning { try? engine.start() }

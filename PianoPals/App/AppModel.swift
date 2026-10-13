@@ -42,6 +42,17 @@ final class AppModel: ObservableObject {
     let synth = ToneSynth()
     let narrator = Narrator()
     let history = HandFrameHistory()
+    /// Key press → app reaction, in milliseconds (shown in Grown-ups ▸ Diagnostics).
+    let latency = LatencyMeter()
+    @Published private(set) var diagnostics = Diagnostics()
+
+    struct Diagnostics: Equatable {
+        var latencyP50: Double?
+        var latencyP95: Double?
+        var samples = 0
+        /// Share of correct notes whose finger the camera could judge.
+        var fingerVerifiedRate: Double?
+    }
 
     var generator: LessonGenerating
     private let calibrationStore = CalibrationStore()
@@ -228,6 +239,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Turns notes heard through the microphone into a lesson. nil when too few notes were recognised.
+    func addListenedLesson(from heard: [RawNote]) -> Lesson? {
+        let title = "Heard tune " + Date().formatted(date: .omitted, time: .shortened)
+        guard let lesson = ListenTranscriber.lesson(from: heard, hand: settings.lessonHand, title: title) else { return nil }
+        add(lesson)
+        generation = .added(message: "Added “\(lesson.title)”.", lesson: lesson)
+        return lesson
+    }
+
     func clearGenerationMessage() { generation = .idle }
 
     // MARK: Input pipeline
@@ -253,12 +273,21 @@ final class AppModel: ObservableObject {
                 while !history.hasFrame(atOrAfter: event.timestamp + 0.02, channel: channel), HostClock.now < deadline {
                     try? await Task.sleep(for: .milliseconds(8))
                 }
-                if let frame = history.frame(nearest: event.timestamp, channel: channel) {
-                    detected = FingerAttributor().attribute(note: Int(event.note), frame: frame, region: region(for: channel))
-                }
+                // Vote over ~150 ms of frames around the strike so one jittery frame can't decide.
+                let frames = history.frames(from: event.timestamp - 0.10, to: event.timestamp + 0.05, channel: channel)
+                detected = FingerAttributor().attribute(note: Int(event.note), frames: frames, region: region(for: channel))
             }
         }
+        let wasPlaying = session.phase == .playing
         session.handleNoteOn(note: Int(event.note), detected: detected)
+        if wasPlaying { recordDiagnostics(eventTime: event.timestamp) }
+    }
+
+    private func recordDiagnostics(eventTime: TimeInterval) {
+        latency.record(milliseconds: (HostClock.now - eventTime) * 1000)
+        let stats = analyzer.stats
+        diagnostics = Diagnostics(latencyP50: latency.percentile(50), latencyP95: latency.percentile(95), samples: latency.count,
+                                  fingerVerifiedRate: stats.hits > 0 ? Double(stats.fingerVerified) / Double(stats.hits) : nil)
     }
 
     // MARK: Reactions

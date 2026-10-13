@@ -41,6 +41,49 @@ struct FingerAttributor: Sendable {
     }
 }
 
+extension FingerAttributor {
+    /// Votes across several frames around the strike: for each (hand, finger) the *mean* distance to the struck key over
+    /// the window is used, so a single noisy frame can't flip the answer. Hand identities come from `HandSmoother`.
+    func attribute(note: Int, frames: [HandFrame], region: KeyboardRegion) -> DetectedFinger? {
+        guard !frames.isEmpty else { return nil }
+        struct Key: Hashable { let hand: Int; let finger: Finger }
+        struct Accumulator { var distances: [Double] = []; var confidences: [Float] = []; var sides: [HandSide] = [] }
+        let target = region.position(ofNote: note)
+        var table: [Key: Accumulator] = [:]
+        for frame in frames {
+            for hand in frame.hands {
+                for finger in Finger.allCases {
+                    guard let tip = hand.tip(of: finger), tip.confidence >= minimumJointConfidence else { continue }
+                    let distance = abs(region.whitePosition(forX: Double(tip.point.x)) - target)
+                    var entry = table[Key(hand: hand.id, finger: finger)] ?? Accumulator()
+                    entry.distances.append(distance)
+                    entry.confidences.append(tip.confidence)
+                    if let side = hand.side { entry.sides.append(side) }
+                    table[Key(hand: hand.id, finger: finger)] = entry
+                }
+            }
+        }
+        let needed = max(1, (frames.count + 1) / 2)
+        var best: (key: Key, mean: Double, confidence: Float, sides: [HandSide])?
+        for (key, entry) in table where entry.distances.count >= needed {
+            let mean = entry.distances.reduce(0, +) / Double(entry.distances.count)
+            guard mean <= maxDistance else { continue }
+            let confidence = entry.confidences.reduce(0, +) / Float(entry.confidences.count)
+            if let current = best {
+                let closer = mean < current.mean - tieMargin
+                let tied = abs(mean - current.mean) <= tieMargin
+                if closer || (tied && confidence > current.confidence) { best = (key, mean, confidence, entry.sides) }
+            } else {
+                best = (key, mean, confidence, entry.sides)
+            }
+        }
+        guard let winner = best else { return nil }
+        let side = [HandSide.left, .right].max { a, b in winner.sides.filter { $0 == a }.count < winner.sides.filter { $0 == b }.count }
+        return DetectedFinger(finger: winner.key.finger, hand: winner.sides.isEmpty ? nil : side,
+                              channel: frames[0].channel, distance: winner.mean)
+    }
+}
+
 /// Short rolling buffer of recent hand frames per camera, written from capture queues and read on demand.
 final class HandFrameHistory: @unchecked Sendable {
     private let storage = Locked<[CameraChannelID: [HandFrame]]>([:])
@@ -72,6 +115,11 @@ final class HandFrameHistory: @unchecked Sendable {
             guard let best, abs(best.timestamp - time) <= tolerance else { return nil }
             return best
         }
+    }
+
+    /// All frames for `channel` captured within `[start, end]`, oldest first.
+    func frames(from start: TimeInterval, to end: TimeInterval, channel: CameraChannelID) -> [HandFrame] {
+        storage.withLock { buffers in (buffers[channel] ?? []).filter { $0.timestamp >= start && $0.timestamp <= end } }
     }
 
     /// True once a frame captured at or after `time` has arrived for `channel`.

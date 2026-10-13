@@ -324,6 +324,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Piano Pals";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Piano Pals uses the camera to see your hands on the piano keys so it can show you which finger to use. Video never leaves this iPad.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Piano Pals can listen to a song you play or hum and turn it into notes. The sound is analysed on this iPad and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
@@ -355,6 +356,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Piano Pals";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Piano Pals uses the camera to see your hands on the piano keys so it can show you which finger to use. Video never leaves this iPad.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Piano Pals can listen to a song you play or hum and turn it into notes. The sound is analysed on this iPad and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
