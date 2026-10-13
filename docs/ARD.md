@@ -10,7 +10,9 @@ PianoPals/
   Lesson/       FingeringEngine, RawMusicParsers (note text + .mid), SongLibrary,
                 AILessonGeneratorService (+ transports, local fallback), LessonSession (engine)
   MIDI/         MIDIParser (pure), MIDIManager (CoreMIDI)
-  Camera/       CameraDevices, CameraChannel (1 AVCaptureSession each), CameraHub, CameraPreviewView
+  Camera/       CameraDevices, CameraChannel (1 AVCaptureSession each, or a remote iPhone), CameraHub, CameraPreviewView, PreviewEncoder
+  Companion/    CompanionProtocol (wire + ClockSync), CompanionTransport (TLS-PSK, framing, Keychain), CompanionHost (iPhone), RemoteCameraLink (iPad), CompanionModel/RootView (iPhone UI)
+  Coach/        MistakeAnalyzer, Coach, SessionSummary/ProgressStore
   Vision/       HandModels, HandPoseProcessor, FaceExpression, KeyboardRegion, FingerAttribution
   Calibration/  HandTemplate (+matcher), CalibrationFlow, CalibrationStore
   Audio/        ToneSynth, Narrator
@@ -34,7 +36,7 @@ Camera ─► CameraChannel ─► HandPoseProcessor ─► HandFrameHistory (ri
 ```
 
 ## 3. Decisions
-**D1 — Custom camera picker instead of `AVContinuityDevicePickerViewController`.** The header is under `TARGET_OS_TV` in the iOS 27 SDK; it does not exist on iPadOS. iPadOS surfaces a nearby iPhone through `AVCaptureDevice.DiscoverySession` (`.continuityCamera`). We list devices live and let the grown-up assign them. *Rejected:* UIKit wrapper (not available).
+**D1 — ~~Continuity Camera~~ → iPhone camera mode (corrected 2026-10-13).** The original plan assumed iPadOS surfaces a nearby iPhone via `AVCaptureDevice.DiscoverySession(.continuityCamera)`. On a real iPad Pro the overhead channel stayed `noCamera` with the iPhone nearby, and Apple's Continuity requirements list iPhone-as-webcam for Mac and iPhone/iPad-as-webcam for Apple TV only. `AVContinuityDevicePickerViewController` is tvOS-only. **Replaced by D15.** USB-C UVC webcams (`.external`) remain supported.
 
 **D2 — `.external` / `.continuityCamera`, not `.externalUnknown`.** `.externalUnknown` is macOS-only (unavailable on iOS).
 
@@ -60,6 +62,10 @@ Camera ─► CameraChannel ─► HandPoseProcessor ─► HandFrameHistory (ri
 
 **D13 — Swift 5 language mode, iOS 17 deployment target.** Avoids Swift 6 strict-concurrency friction with AVFoundation/CoreMIDI callbacks; shared mutable state is wrapped in `Locked`. Revisit once on a Swift 6 migration.
 
+**D15 — iPhone camera mode over an encrypted local link.** The same app on an iPhone shows a camera screen: the iPhone runs Vision hand pose itself and sends only landmarks (+ a ≤ 60 KB JPEG preview at ~10 fps) to the iPad. Transport: Bonjour (`_pianopals-cam._tcp`) + Network.framework TCP with **TLS 1.2 PSK (AES-128-GCM)** derived from an 8-digit pairing code shown on the iPhone, so nothing without the code can connect and traffic is encrypted; codes are stored in the Keychain on both sides and the iPad reconnects automatically. Length-prefixed JSON messages; droppable frames are skipped when > 3 sends are queued (latency over completeness). ClockSync (12 quick pings then 1 Hz, lowest-RTT sample wins) maps iPhone frame times onto the iPad host clock so a key strike and the hand frame it landed in can be compared. *Rejected:* MultipeerConnectivity (could not be verified between simulators; the in-process encrypted loopback test is possible with Network.framework), streaming video to the iPad (privacy, bandwidth, latency), Continuity Camera (unsupported, D1).
+
+**D16 — Local-model calls never sit on the critical path.** Apple's on-device model is only consulted after the deterministic matcher misses, with a hard timeout implemented so it returns even if the model call ignores cancellation (a task group would wait for it — this caused a real hang found in testing).
+
 **D14 — Project uses Xcode synchronized folders (objectVersion 77).** New Swift files are picked up automatically; no per-file project edits.
 
 ## 4. Risks
@@ -74,6 +80,8 @@ Camera ─► CameraChannel ─► HandPoseProcessor ─► HandFrameHistory (ri
 ## 5. Change log
 * 2026-10-13 — Engine layers, tests, PRD/ARD created.
 * 2026-10-13 — Child-friendly UI built; verified in iPad simulator (home, songs, lesson, calibration with demo hands, grown-ups, finish card). 94 unit + 7 UI tests green. Bugs found and fixed through testing: tempo/mode change re-anchored with the *new* value (notes jumped); fingering allowed different fingers on a repeated note; Simulator showed a spurious "camera failed" state; calibration hand-print rendered as a blob.
+* 2026-10-13 — AI phase: song index + fuzzy matcher, honest not-found, listen mode (YIN), mistake analyzer, coach, progress, hand smoothing, majority-vote finger attribution, latency metrics (see PRD_AI_COACH.md). Bugs found by testing: spurious "Making your song…" spinner (Grown-ups view wasn't observing the model), timeout that waited for an uncancellable model call, repeated notes merged by the segmenter, pitch detector too slow in debug builds.
+* 2026-10-13 — Real-iPad test showed Continuity Camera is unavailable to apps → D1 corrected, iPhone camera mode built (D15).
 * Added Debug-only launch arguments (`-debugScreen`, `-debugSong`, `-debugAutostart`, `-debugPlay`, `-demoHands`) for deterministic screenshots/tests. They compile out of Release.
 
 ## 6. Verification status

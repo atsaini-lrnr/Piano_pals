@@ -28,6 +28,7 @@ song, and (b) the app only reacts to mistakes with a colour pulse — it doesn't
 | F8 | Coach | Gentle, escalating, rate-limited hints; adaptive pace; spoken + visual |
 | F9 | Parent progress | Per-session summary (templates; Apple on-device model phrasing when available), stored locally |
 | F10 | Camera accuracy pass | Joint smoothing + multi-frame finger voting + measured latency / verified-finger rate |
+| F11 | iPhone camera mode | iPhone becomes the iPad's overhead camera over an encrypted, pairing-code-protected local link (replaces unsupported Continuity Camera) |
 
 ## 4. Success metrics
 Legend: ✅ met & automatically verified · 🟡 built, **needs on-device measurement** · ⬜ not yet
@@ -35,20 +36,31 @@ Legend: ✅ met & automatically verified · 🟡 built, **needs on-device measur
 ### 4.1 Correctness (automatic, in CI)
 | ID | Metric | Target | How measured | Status |
 |---|---|---|---|---|
-| M1 | Mistake classification accuracy on labelled corpus | 100 % | Unit tests over every `MistakeKind` incl. edge cases | ⬜ |
-| M2 | Banned/negative words in anything the coach can say | 0 | Test scans all phrase pools against a banned list | ⬜ |
-| M3 | Song-match top-1 accuracy on ≥ 60 query variants (typos, noisy titles, aliases, composer-only) | ≥ 95 % | Unit test | ⬜ |
-| M4 | False-match rate on ≥ 20 unknown titles | 0 % | Unit test | ⬜ |
-| M5 | Every bundled song: valid notation, in piano range, licence field set, fingers 1–5 | 100 % | Unit test | ⬜ |
-| M6 | Listen mode: pitch error | ≤ 25 cents, 80–1000 Hz | Synthetic tones incl. harmonics + vibrato | ⬜ |
-| M7 | Listen mode: note-level F1 on synthetic monophonic melodies | ≥ 0.95 | Unit test | ⬜ |
-| M8 | Listen mode: silence / noise produces no notes | 0 notes | Unit test | ⬜ |
-| M9 | Joint smoothing: jitter reduction at rest | ≥ 50 % lower σ | Unit test | ⬜ |
-| M10 | Multi-frame voting beats a single noisy frame | outvotes outlier | Unit test | ⬜ |
-| M11 | Coach rate limit | ≤ 1 spoken tip / 6 s | Unit test | ⬜ |
-| M12 | Privacy: no media leaves device | 0 uploads | Code review: only `YouTubeOEmbedFetcher` and the optional endpoint use `URLSession` | ⬜ |
+| M1 | Mistake classification accuracy on labelled corpus | 100 % | Unit tests over every `MistakeKind` incl. edge cases | ✅ |
+| M2 | Banned/negative words in anything the coach can say | 0 | Test scans all phrase pools against a banned list | ✅ |
+| M3 | Song-match top-1 accuracy on ≥ 60 query variants (typos, noisy titles, aliases, composer-only) | ≥ 95 % | Unit test | ✅ |
+| M4 | False-match rate on ≥ 20 unknown titles | 0 % | Unit test | ✅ |
+| M5 | Every bundled song: valid notation, in piano range, licence field set, fingers 1–5 | 100 % | Unit test | ✅ |
+| M6 | Listen mode: pitch error | ≤ 25 cents, 80–1000 Hz | Synthetic tones incl. harmonics + vibrato | ✅ |
+| M7 | Listen mode: note-level F1 on synthetic monophonic melodies | ≥ 0.95 | Unit test | ✅ |
+| M8 | Listen mode: silence / noise produces no notes | 0 notes | Unit test | ✅ |
+| M9 | Joint smoothing: jitter reduction at rest | ≥ 50 % lower σ | Unit test | ✅ |
+| M10 | Multi-frame voting beats a single noisy frame | outvotes outlier | Unit test | ✅ |
+| M11 | Coach rate limit | ≤ 1 spoken tip / 6 s | Unit test | ✅ |
+| M12 | Privacy: no media leaves device | 0 uploads | Code review: only `YouTubeOEmbedFetcher` and the optional endpoint use `URLSession` | 🟡 |
 
-### 4.2 On-device (measured by you; the app shows the numbers in Grown-ups ▸ Diagnostics)
+#### 4.1b Companion link (automatic)
+| ID | Metric | Target | How measured | Status |
+|---|---|---|---|---|
+| C1 | Messages encrypted end to end with the pairing code | handshake succeeds with the right code | Loopback TLS-PSK test | ✅ |
+| C2 | Wrong code connects / delivers messages | never | Loopback test | ✅ |
+| C3 | 50 KB preview byte-for-byte intact; 30 frames in order | 100 % | Loopback test | ✅ |
+| C4 | Oversized frame (5 MB header) refused | connection dropped | Loopback test | ✅ |
+| C5 | Hand frame size | < 8 KB (≈ 0.5 MB/s at 60 fps) | Unit test | ✅ |
+| C6 | Clock alignment from lowest-RTT pings | within asymmetry error (≈ 3 ms in test) | Unit test | ✅ |
+| C7 | Discovery of an iPhone by the iPad (Bonjour) | found | Seen in simulators; real devices pending | 🟡 |
+
+## 4.2 On-device (measured by you; the app shows the numbers in Grown-ups ▸ Diagnostics)
 | ID | Metric | Target | How measured | Status |
 |---|---|---|---|---|
 | D1 | Key-press → visual feedback (p95) | ≤ 150 ms | `LatencyMeter` (MIDI timestamp → feedback) | 🟡 |
@@ -59,6 +71,7 @@ Legend: ✅ met & automatically verified · 🟡 built, **needs on-device measur
 | D6 | Coach tips judged helpful, never upsetting | 0 distress events in sessions | Observed sessions | 🟡 |
 | D7 | Listen mode on a real hummed/played tune: correct notes | ≥ 80 % for simple tunes | Manual | 🟡 |
 | D8 | Battery/thermal: 20-min session, no thermal warning | pass | Manual | 🟡 |
+| D9 | iPhone camera mode: connect within 10 s, hand updates ≥ 24/s, picture-to-iPad delay ≤ 150 ms | pass | iPad picker readout (updates/s, ms) | 🟡 |
 
 ## 5. Functional requirements and acceptance
 **F1** Index ≥ 18 licence-tagged songs bundled; `tools/build_song_index.py` converts a folder of `.mid` + licence manifest into index JSON (tested).

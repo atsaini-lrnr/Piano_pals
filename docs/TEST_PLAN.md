@@ -19,15 +19,20 @@ automated tests: `PianoPalsTests` (94 unit tests) and `PianoPalsUITests` (7 touc
 | 1.4 | Grown-ups ▸ Diagnostics | fps ≈ 30–60, hand count matches reality |
 | 1.5 | Picture sideways or upside down? | Use Grown-ups ▸ Cameras ▸ *Turn picture* / *Flip* until upright |
 
-## 2. iPhone as overhead camera (Continuity Camera)
-Same Apple ID on both devices, Wi-Fi + Bluetooth on, iPhone propped sideways above the keys, screen locked.
+## 2. iPhone as overhead camera ("camera mode")
+iPadOS can't use an iPhone as a normal camera, so Piano Pals does it itself. Both devices run the **same app**; the iPhone automatically shows a camera screen.
+Setup: install the app on the iPhone too (Xcode: choose the iPhone as run destination, same Team). Both on the same Wi-Fi.
 | # | Do | Expect |
 |---|---|---|
-| 2.1 | Tap *Use my iPhone* (lesson screen) or Grown-ups ▸ *Choose cameras* | iPhone appears in "Available cameras" within ~10 s |
-| 2.2 | Assign it to *Overhead view* | "Top view" tile shows the iPhone's picture; side view keeps running |
-| 2.3 | Grown-ups ▸ Layout ▸ Picture in picture | One big, one small; tapping the small one swaps |
-| 2.4 | Unlock/remove the iPhone | Tile falls back to the friendly placeholder, app doesn't crash |
-**Known unknown:** I couldn't verify two cameras running at once on iPadOS hardware. If the second camera freezes the first, tell me — the fallback is to run one at a time.
+| 2.1 | Open Piano Pals on the iPhone; allow Camera and **Local Network** | Camera screen, "Waiting for the iPad…", an 8-digit **pairing code** |
+| 2.2 | iPad: lesson screen ▸ *Use my iPhone* (or Grown-ups ▸ Choose cameras); allow **Local Network** | Your iPhone's name appears in "Looking for iPhones…" within a few seconds |
+| 2.3 | Tap it, type the code | iPad: "Connected to …" with updates/s and ms; iPhone: "Connected to the iPad" |
+| 2.4 | Prop the iPhone above the keys, pointing down; look at the iPad's **Top view** tile | Live picture + coloured numbered finger dots on your hand |
+| 2.5 | Wrong picture orientation? | iPad: Grown-ups ▸ Cameras ▸ *Turn picture / Flip* (it tells the iPhone), or the buttons on the iPhone |
+| 2.6 | Lock/unlock iPhone, walk out of range, come back | iPad reconnects by itself (code is remembered); no crash |
+| 2.7 | Wrong code | "Couldn't connect… check the pairing code" and the prompt again |
+**Report:** the "updates/s" and "ms" numbers, whether dots follow fingers smoothly, and whether the iPad's Diagnostics "Finger seen by camera" improves with the top view. If the iPhone isn't listed: Settings ▸ Privacy ▸ Local Network ▸ Piano Pals must be on for *both* devices.
+Optional: a USB-C webcam plugged into the iPad appears in Choose cameras as an external camera.
 
 ## 3. MIDI keyboard (USB-C)
 | # | Do | Expect |

@@ -26,8 +26,8 @@ Legend: ✅ done & unit-tested · 🟡 done, needs on-device verification · ⬜
 | ID | Requirement | Status |
 |---|---|---|
 | CAM-1 | Channel 1: built-in iPad camera (front/ultra-wide/back selectable) | 🟡 |
-| CAM-2 | Channel 2: nearby iPhone via Continuity Camera / external camera discovery (`.continuityCamera`, `.external`) | 🟡 |
-| CAM-3 | Easy way to pick the iPhone: in-app camera picker sheet (replaces `AVContinuityDevicePickerViewController`, which is tvOS-only) | 🟡 |
+| CAM-2 | Channel 2: a second camera. **Corrected after on-device testing:** iPadOS does not offer an iPhone to third-party apps as a Continuity Camera. Replaced by **iPhone camera mode** (companion link, see PRD v2 F11); USB-C webcams (`.external`) still work | 🟡 (needs real iPhone test) |
+| CAM-3 | Easy way to pick the iPhone: in-app camera picker lists nearby iPhones in camera mode + pairing-code entry (`AVContinuityDevicePickerViewController` is tvOS-only) | 🟡 |
 | CAM-4 | Grid and picture-in-picture layouts; swap which is large | ✅ (UI renders; swap needs 2 real cameras) |
 | CAM-5 | Independent sessions/queues per camera; interruption + disconnect handling; 30/60 fps format selection | 🟡 |
 | CAM-6 | Manual rotate/flip per camera (overhead mounts) | 🟡 |
