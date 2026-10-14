@@ -312,3 +312,76 @@ final class CoachingGeometryTests: XCTestCase {
 private extension FingerGlyph {
     var hashValueForTest: Int { String(describing: self).hashValue }
 }
+
+final class SpanFollowerTests: XCTestCase {
+    private let limit = 36...96
+
+    func testALessonThatFitsNeverMoves() {
+        var follower = SpanFollower(windowKeys: 15, limit: limit)
+        let first = follower.update(lessonRange: 60...67, upcoming: [60, 62])
+        for notes in [[64, 65], [67], [], [60]] {
+            XCTAssertEqual(follower.update(lessonRange: 60...67, upcoming: notes), first)
+        }
+        XCTAssertTrue(first.contains(60) && first.contains(67))
+        XCTAssertEqual(first.whiteKeyCount, 15)
+    }
+
+    func testAnOctaveClimbPansUpAndKeepsTheUpcomingNotesInView() {
+        var follower = SpanFollower(windowKeys: 15, limit: limit)
+        // A two-and-a-half octave run from C3 up to G5: too wide for 15 keys.
+        let low = follower.update(lessonRange: 48...79, upcoming: [48, 50, 52, 53])
+        XCTAssertTrue(low.contains(48))
+        let middle = follower.update(lessonRange: 48...79, upcoming: [67, 69, 71, 72])
+        XCTAssertNotEqual(middle, low, "the window moved")
+        XCTAssertTrue([67, 69, 71, 72].allSatisfy { middle.contains($0) })
+        let high = follower.update(lessonRange: 48...79, upcoming: [76, 77, 79, 77])
+        XCTAssertTrue([76, 77, 79].allSatisfy { high.contains($0) })
+        XCTAssertGreaterThan(high.lowNote, low.lowNote)
+        // …and back down again.
+        let back = follower.update(lessonRange: 48...79, upcoming: [50, 48])
+        XCTAssertTrue(back.contains(48) && back.contains(50))
+    }
+
+    func testWindowMovesOnlyInWholeOctavesSoCStaysOnTheLeftEdge() {
+        var follower = SpanFollower(windowKeys: 15, limit: limit)
+        for target in stride(from: 48, through: 84, by: 3) {
+            let span = follower.update(lessonRange: 48...84, upcoming: [target, target + 2])
+            XCTAssertEqual(span.lowNote % 12, 0, "starts on a C: \(PianoKeys.name(span.lowNote))")
+            XCTAssertEqual(span.whiteKeyCount, 15)
+        }
+    }
+
+    func testNoJitterWhileTheNextNotesStayInTheMiddle() {
+        var follower = SpanFollower(windowKeys: 15, limit: limit)
+        _ = follower.update(lessonRange: 48...84, upcoming: [60, 62, 64, 65])
+        let settled = follower.update(lessonRange: 48...84, upcoming: [60, 62, 64, 65])
+        var moves = 0
+        var previous = settled
+        for notes in [[62, 64, 65, 67], [64, 65, 67, 69], [65, 67, 69, 67], [64, 62, 60, 62]] {
+            let span = follower.update(lessonRange: 48...84, upcoming: notes)
+            if span != previous { moves += 1 }
+            previous = span
+        }
+        XCTAssertEqual(moves, 0, "small steps inside the window don't pan")
+    }
+
+    func testNeverLeavesTheRealKeyboard() {
+        var follower = SpanFollower(windowKeys: 15, limit: 48...72)   // a 25-key board
+        for target in [48, 55, 60, 72, 70, 50] {
+            let span = follower.update(lessonRange: 48...72, upcoming: [target])
+            XCTAssertGreaterThanOrEqual(span.lowNote, 48)
+            XCTAssertLessThanOrEqual(span.highNote, 72, "\(PianoKeys.name(span.highNote))")
+        }
+        var wide = SpanFollower(windowKeys: 15, limit: limit)
+        let top = wide.update(lessonRange: 40...96, upcoming: [95, 96])
+        XCTAssertLessThanOrEqual(top.highNote, 96)
+        let bottom = wide.update(lessonRange: 40...96, upcoming: [36, 38])
+        XCTAssertGreaterThanOrEqual(bottom.lowNote, 36)
+    }
+
+    func testEmptyUpcomingKeepsTheCurrentWindow() {
+        var follower = SpanFollower(windowKeys: 15, limit: limit)
+        let a = follower.update(lessonRange: 48...84, upcoming: [72, 74])
+        XCTAssertEqual(follower.update(lessonRange: 48...84, upcoming: []), a)
+    }
+}

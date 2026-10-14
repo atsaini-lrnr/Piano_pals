@@ -19,12 +19,9 @@ private struct LessonContent: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var confetti: ConfettiModel
 
-    private var span: KeyboardSpan {
-        let low = session.lesson?.lowestNote ?? 60
-        let high = session.lesson?.highestNote ?? 67
-        // As many keys as fit across the screen (at least two octaves), but never keys the real keyboard doesn't have.
-        return .fitting(low: low, high: high, minimumWhiteKeys: 15, limit: app.keyboardRange)
-    }
+    /// The keys on screen: a 15-key window that follows the music by whole octaves when the lesson is wider than the window,
+    /// and never shows keys the real keyboard doesn't have. Lane, keyboard and camera strip all use this same span.
+    private var span: KeyboardSpan { model.visibleSpan }
 
     var body: some View {
         GeometryReader { geo in
@@ -51,32 +48,95 @@ private struct LessonContent: View {
     // MARK: Camera section (top)
 
     private func cameraSection(height: CGFloat) -> some View {
-        HStack(spacing: 12) {
-            ZStack(alignment: .topLeading) {
-                VStack {
-                    AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt)
-                        .frame(width: 190, height: 200)
-                    Spacer(minLength: 0)
-                }
-                if let message = model.coachMessage {
-                    Text(message)
-                        .font(.kid(20, weight: .bold))
-                        .foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white))
-                        .shadow(color: .black.opacity(0.15), radius: 4, y: 3)
-                        .frame(maxWidth: 240, alignment: .leading)
-                        .transition(.scale(scale: 0.8, anchor: .bottomLeading).combined(with: .opacity))
-                        .accessibilityLabel(message)
+        GeometryReader { geo in
+            let channelID = cameras.trackingChannel
+            let channel = cameras.channel(channelID)
+            let region = app.region(for: channelID)
+            let pictureSize = channel.latestFrame?.imageSize ?? channel.videoSize
+            let live = channel.state == .running || (settings.demoHands && channelID == .primary)
+            let crop = settings.alignedCamera && live
+                ? CameraAlignment.crop(region: region, span: span, imageSize: pictureSize, stripAspect: geo.size.width / height) : nil
+            ZStack(alignment: .top) {
+                if let crop {
+                    alignedStrip(channel: channel, crop: crop, region: region, channelID: channelID)
+                } else {
+                    unalignedBand(width: geo.size.width, showHint: settings.alignedCamera && live && !region.isCalibrated)
                 }
             }
-            .frame(width: 190)
-            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
-
-            CameraBand(hub: cameras, highlight: session.targets.first?.note.finger, demoHands: settings.demoHands,
-                       coaching: { model.coachingContext(for: $0) }) { app.showCameraPicker = true }
+            .frame(width: geo.size.width, height: height)
         }
         .frame(height: height)
+    }
+
+    /// Overhead camera lined up with the keyboard below, with the panda tucked in the corner.
+    private func alignedStrip(channel: CameraChannel, crop: AlignedCrop, region: KeyboardRegion, channelID: CameraChannelID) -> some View {
+        ZStack(alignment: .topLeading) {
+            AlignedCameraStrip(channel: channel, crop: crop, span: span, region: region, showFootage: settings.showFootage,
+                               highlight: session.targets.first?.note.finger, coaching: model.coachingContext(for: channelID))
+            HStack(alignment: .top, spacing: 8) {
+                AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt).frame(width: 120, height: 130)
+                coachBubble
+            }
+            .padding(10)
+            if settings.showSideView, channelID != .primary, cameras.primary.state == .running {
+                HStack {
+                    Spacer()
+                    CameraTile(channel: cameras.primary, title: "Side view", highlight: nil, isTracking: false)
+                        .frame(width: 210)
+                }
+                .padding(10)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
+    }
+
+    private var coachBubble: some View {
+        Group {
+            if let message = model.coachMessage {
+                Text(message)
+                    .font(.kid(20, weight: .bold))
+                    .foregroundStyle(Palette.ink)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white))
+                    .shadow(color: .black.opacity(0.2), radius: 4, y: 3)
+                    .frame(maxWidth: 260, alignment: .leading)
+                    .transition(.scale(scale: 0.8, anchor: .topLeading).combined(with: .opacity))
+                    .accessibilityLabel(message)
+            }
+        }
+    }
+
+    /// The whole camera pictures (not lined up), used before the keyboard is calibrated or with no overhead view.
+    private func unalignedBand(width: CGFloat, showHint: Bool) -> some View {
+        ZStack(alignment: .top) {
+            HStack(spacing: 12) {
+                ZStack(alignment: .topLeading) {
+                    VStack {
+                        AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt).frame(width: 190, height: 200)
+                        Spacer(minLength: 0)
+                    }
+                    coachBubble
+                }
+                .frame(width: 190)
+                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
+
+                CameraBand(hub: cameras, highlight: session.targets.first?.note.finger, demoHands: settings.demoHands,
+                           coaching: { model.coachingContext(for: $0) }) { app.showCameraPicker = true }
+            }
+            if showHint {
+                Button {
+                    app.leaveLesson()
+                    app.screen = .calibration
+                } label: {
+                    Label("Line up the camera with the keys: tap My Hands", systemImage: "hand.raised.fill")
+                        .font(.kid(20)).foregroundStyle(.white)
+                        .padding(.horizontal, 18).padding(.vertical, 10)
+                        .background(Capsule().fill(Palette.blueButton))
+                }
+                .buttonStyle(BouncyButtonStyle())
+                .padding(.top, 8)
+            }
+        }
     }
 
     // MARK: Header

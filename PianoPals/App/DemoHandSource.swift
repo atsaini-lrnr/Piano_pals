@@ -7,7 +7,7 @@ enum DemoHandSource {
 
     /// A region that puts middle C at the centre of the picture with ~16 white keys visible.
     static func region(firstNote: Int, lastNote: Int) -> KeyboardRegion {
-        let slope = 11.0
+        let slope = 20.0
         let intercept = PianoKeys.center(of: 60) - Double(PianoKeys.whiteIndex(firstNote)) - slope * 0.5
         return KeyboardRegion(firstNote: firstNote, lastNote: lastNote, slope: slope, intercept: intercept,
                               yMin: 0.45, yMax: 0.85, isCalibrated: true)

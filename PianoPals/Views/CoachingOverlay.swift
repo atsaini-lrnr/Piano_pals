@@ -51,6 +51,7 @@ struct CoachingOverlayView: View {
     let context: CoachingContext
     var fit = false
     var imageSize: CGSize
+    var crop: AlignedCrop?
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
@@ -65,7 +66,8 @@ struct CoachingOverlayView: View {
     }
 
     private func map(_ point: CGPoint, _ size: CGSize) -> CGPoint {
-        OverlayGeometry.viewPoint(point, imageSize: imageSize, viewSize: size, fit: fit)
+        if let crop { return OverlayGeometry.viewPoint(point, crop: crop, viewSize: size) }
+        return OverlayGeometry.viewPoint(point, imageSize: imageSize, viewSize: size, fit: fit)
     }
 
     private func drawMarker(_ canvas: inout GraphicsContext, size: CGSize, pulse: Double) {

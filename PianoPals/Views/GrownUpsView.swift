@@ -116,6 +116,9 @@ private struct GrownUpsContent: View {
                     .font(.footnote).multilineTextAlignment(.trailing)
             }
             Button("Choose cameras (including your iPhone)…") { app.showCameraPicker = true }
+            Toggle("Line up the camera with the keys", isOn: $settings.alignedCamera)
+            Toggle("Show the camera picture (off = just keys and fingers)", isOn: $settings.showFootage)
+            Toggle("Also show the iPad's front camera", isOn: $settings.showSideView)
             Picker("Layout", selection: $cameras.layout) {
                 ForEach(CameraLayout.allCases) { Text($0.displayName).tag($0) }
             }

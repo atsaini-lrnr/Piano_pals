@@ -1,0 +1,64 @@
+# Piano Pals — Functional Requirements Tracker
+
+Single source of truth for **what we committed to** and **where each item stands**. Detail and success metrics live in the PRDs;
+this page is the index. Rule of work: *only build things listed here. A new idea gets a row first (marked NEW), then code.*
+
+Status: ✅ done & verified · 🟡 built, needs real-world check (device / hardware / child) · ⬜ not started · ⛔ blocked on user input
+
+Last updated: 2026-10-14
+
+## A. Core (PRD.md — v1 brief)
+
+| ID | Requirement | Status | Notes |
+|---|---|---|---|
+| CAM-1 | Built-in iPad camera | 🟡 | working on user's iPad |
+| CAM-2/3 | Second camera = iPhone in camera mode (encrypted local link, pairing code) | 🟡 | works with user's iPhone; retest needs both unlocked |
+| CAM-4 | Grid / picture-in-picture, swap | ✅ | superseded in lesson by camera-on-top layout (A1) |
+| CAM-5/6 | Independent sessions, 60 fps, rotate/flip | 🟡 | |
+| VIS-1…5 | Hand pose, 21 landmarks, keyboard-normalised, finger attribution, overlay | ✅ / 🟡 live | |
+| MID-1…3 | CoreMIDI (1.0 + UMP 2.0), shared clock | ✅ / 🟡 real keyboard | Impact LX61+ |
+| LES-1…5 | Input → lesson, mockable service, on-device fingering, validation | ✅ | |
+| KID-1…8 | Colour+shape fingers, big buttons, avatar, confetti, gentle feedback, lane, calibration, grown-ups gate | ✅ / 🟡 | |
+
+## B. AI coach (PRD_AI_COACH.md — v2)
+
+| ID | Requirement | Status |
+|---|---|---|
+| F1 | Bundled licence-tagged song index (18 songs) | ✅ |
+| F2 | Offline fuzzy matching | ✅ |
+| F3 | YouTube/share link → title → match | ✅ |
+| F4 | Honest not-found | ✅ |
+| F5 | On-device title cleanup | ✅ |
+| F6 | Listen mode (YIN) | ✅ / 🟡 real playing |
+| F7 | Mistake analyzer | ✅ |
+| F8 | Coach (rate-limited, adaptive) | ✅ |
+| F9 | Parent progress | ✅ |
+| F10 | Camera accuracy pass | ✅ / 🟡 live |
+| F11 | iPhone camera mode | 🟡 |
+| M1–M11, C1–C6 | Metrics verified by unit/loopback tests | ✅ |
+| M12, C7, D1–D9 | Privacy review, discovery, latency, child trials | 🟡 need real-world sessions |
+
+## C. Practice, layout, transcription (PRD_V3_PRACTICE_AND_TRANSCRIBE.md — v3)
+
+| ID | Requirement | Status | Notes |
+|---|---|---|---|
+| F12 / L1–L5 | Camera on top, lesson below, keyboard ≥ 90 % width, wrong-finger ring + arrow, target marker | ✅ | UI-tested; visual check with demo hands |
+| A1 | Camera strip lined up with on-screen keys (crop + mirror from calibration) | ✅ | `CameraAlignment`; real-camera check 🟡 |
+| A2 | Footage optional (stylised keys only) | ✅ | Grown-ups toggle |
+| A3 | iPhone camera overlay mapping correct (aspect fit) | ✅ | |
+| K61 | Tuned for 61-key board (C2–C7), never shows keys it lacks | ✅ | |
+| **P1 (NEW, asked 2026-10-14)** | **Keyboard window pans by whole octaves to follow the music** | ✅ code + 6 unit tests · 🟡 on-device look | `SpanFollower`; lane, keys, strip share one span |
+| F13 / E1–E5 | Beginner exercises, scales RH/LH, daily practice block | ✅ E1–E5 (UI-tested) | |
+| F14 / W1–W6 | Search the web (Mutopia, Wikimedia Commons) for grown-ups, licence-gated, convert to lesson | ⬜ | researched; next |
+| F15 / T1–T6 | On-device audio → notes (Basic Pitch Core ML + YIN fallback) | ⬜ ⛔ T5 | needs model download approval + test clip |
+| MAC | Runs on Mac (Catalyst) | 🟡 | builds & tests pass; user hasn't looked yet |
+
+## D. Order of work (don't skip ahead)
+
+1. ~~P1 panning~~ done
+2. ~~E5 / L-series UI tests~~ done
+3. F14 web search (W1–W6)
+4. F15 transcription (T1–T4 pure code first; T5/T6 after user approves the model + supplies a clip)
+5. Real-world checks (D1–D9, iPhone link retest, Mac look)
+
+Anything not in this table is out of scope until added here.

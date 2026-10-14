@@ -58,6 +58,12 @@ final class AppSettings: ObservableObject {
     @Published var mirrorSmile: Bool { didSet { defaults.set(mirrorSmile, forKey: "mirrorSmile") } }
     @Published var demoHands: Bool { didSet { defaults.set(demoHands, forKey: "demoHands") } }
     @Published var demoWrongFinger: Bool { didSet { defaults.set(demoWrongFinger, forKey: "demoWrongFinger") } }
+    /// Crop the overhead camera so each real key sits above its on-screen key.
+    @Published var alignedCamera: Bool { didSet { defaults.set(alignedCamera, forKey: "alignedCamera") } }
+    /// Off = draw the keys and finger dots only, without the camera picture.
+    @Published var showFootage: Bool { didSet { defaults.set(showFootage, forKey: "showFootage") } }
+    /// Also show the iPad's own camera as a small picture while the overhead view is aligned.
+    @Published var showSideView: Bool { didSet { defaults.set(showSideView, forKey: "showSideView") } }
     @Published var lessonHand: HandSide { didSet { defaults.set(lessonHand.rawValue, forKey: "lessonHand") } }
 
     var keyboardRange: ClosedRange<Int> { keyboardPreset.lowNote...keyboardPreset.highNote }
@@ -74,6 +80,9 @@ final class AppSettings: ObservableObject {
         mirrorSmile = defaults.object(forKey: "mirrorSmile") as? Bool ?? true
         demoHands = defaults.bool(forKey: "demoHands")
         demoWrongFinger = defaults.bool(forKey: "demoWrongFinger")
+        alignedCamera = defaults.object(forKey: "alignedCamera") as? Bool ?? true
+        showFootage = defaults.object(forKey: "showFootage") as? Bool ?? true
+        showSideView = defaults.object(forKey: "showSideView") as? Bool ?? false
         lessonHand = HandSide(rawValue: defaults.string(forKey: "lessonHand") ?? "") ?? .right
     }
 }

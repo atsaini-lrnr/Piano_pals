@@ -349,3 +349,79 @@ final class OverlayGeometryTests: XCTestCase {
         XCTAssertEqual(p, CGPoint(x: 50, y: 25))
     }
 }
+
+final class CameraAlignmentTests: XCTestCase {
+    private let image = CGSize(width: 1920, height: 1080)
+
+    /// A 61-key board (C2…C7) seen by an overhead camera: 36 white keys across; slope = white keys per picture width.
+    private func region(slope: Double = 22, leftWhite: Double = 8) -> KeyboardRegion {
+        // `leftWhite` = white-key position (from C2) at the left edge of the picture.
+        KeyboardRegion(firstNote: 36, lastNote: 96, slope: slope, intercept: leftWhite, yMin: 0.55, yMax: 0.92, isCalibrated: true)
+    }
+
+    /// The point of the whole exercise: every real white key lands exactly above its on-screen key.
+    func testEveryWhiteKeyLinesUpWithTheOnScreenKeyboard() throws {
+        let region = region()
+        let span = KeyboardSpan.fitting(low: 60, high: 67, minimumWhiteKeys: 15, limit: 36...96)
+        let crop = try XCTUnwrap(CameraAlignment.crop(region: region, span: span, imageSize: image, stripAspect: 4.5))
+        let view = CGSize(width: 1300, height: 1300 / 4.5)
+        for index in 0..<span.whiteKeyCount {
+            let position = Double(span.firstWhiteIndex - PianoKeys.whiteIndex(36)) + Double(index) + 0.5   // centre of this white key, from C2
+            let pictureX = region.x(forWhitePosition: position)
+            let onScreen = OverlayGeometry.viewPoint(CGPoint(x: pictureX, y: 0.7), crop: crop, viewSize: view).x
+            let keyboardX = (Double(index) + 0.5) / Double(span.whiteKeyCount) * Double(view.width)
+            XCTAssertEqual(Double(onScreen), keyboardX, accuracy: 0.01, "white key \(index)")
+        }
+    }
+
+    func testTheStripKeepsSquarePixelsAndStaysInsideThePicture() throws {
+        let crop = try XCTUnwrap(CameraAlignment.crop(region: region(), span: .fitting(low: 60, high: 67, minimumWhiteKeys: 15, limit: 36...96),
+                                                     imageSize: image, stripAspect: 4.5))
+        XCTAssertEqual(crop.rect.width * 1920 / (crop.rect.height * 1080), 4.5, accuracy: 1e-6)
+        XCTAssertGreaterThanOrEqual(crop.rect.minX, 0); XCTAssertLessThanOrEqual(crop.rect.maxX, 1)
+        XCTAssertGreaterThanOrEqual(crop.rect.minY, 0); XCTAssertLessThanOrEqual(crop.rect.maxY, 1)
+        // The keys (band 0.55…0.92) are centred in the strip, slightly low so fingertips show above them.
+        XCTAssertTrue(crop.rect.contains(CGPoint(x: crop.rect.midX, y: 0.73)))
+        XCTAssertFalse(crop.flipX)
+    }
+
+    func testAMirroredCameraProducesAMirroredStripThatStillLinesUp() throws {
+        // Slope negative: higher notes are on the picture's left.
+        let mirrored = KeyboardRegion(firstNote: 36, lastNote: 96, slope: -22, intercept: 30, yMin: 0.55, yMax: 0.92, isCalibrated: true)
+        let span = KeyboardSpan.fitting(low: 60, high: 67, minimumWhiteKeys: 15, limit: 36...96)
+        let crop = try XCTUnwrap(CameraAlignment.crop(region: mirrored, span: span, imageSize: image, stripAspect: 4.5))
+        XCTAssertTrue(crop.flipX)
+        let view = CGSize(width: 1300, height: 289)
+        for index in [0, 7, 14] {
+            let position = Double(span.firstWhiteIndex - PianoKeys.whiteIndex(36)) + Double(index) + 0.5
+            let screenX = OverlayGeometry.viewPoint(CGPoint(x: mirrored.x(forWhitePosition: position), y: 0.7), crop: crop, viewSize: view).x
+            XCTAssertEqual(Double(screenX), (Double(index) + 0.5) / 15 * 1300, accuracy: 0.01)
+        }
+    }
+
+    func testNoAlignmentWithoutCalibrationOrWhenKeysFallOutsideThePicture() {
+        let span = KeyboardSpan.fitting(low: 60, high: 67, minimumWhiteKeys: 15, limit: 36...96)
+        XCTAssertNil(CameraAlignment.crop(region: .uncalibrated(firstNote: 36, lastNote: 96), span: span, imageSize: image, stripAspect: 4.5))
+        // The picture only shows white keys 8…16 (slope 22 → 1/22 of the width per key is wrong; use a wide-zoom camera):
+        let zoomed = region(slope: 9, leftWhite: 12)            // sees only 9 white keys, but the span needs 15
+        XCTAssertNil(CameraAlignment.crop(region: zoomed, span: span, imageSize: image, stripAspect: 4.5))
+        XCTAssertNil(CameraAlignment.crop(region: region(), span: span, imageSize: .zero, stripAspect: 4.5))
+        XCTAssertNil(CameraAlignment.crop(region: region(), span: span, imageSize: image, stripAspect: 0))
+    }
+
+    func testAnExtremelyTallRequestIsCappedAndTheAspectAdjusts() throws {
+        // Asking for a 1.2:1 strip of a 15-key span would need more picture height than exists.
+        let span = KeyboardSpan.fitting(low: 60, high: 67, minimumWhiteKeys: 15, limit: 36...96)
+        let crop = try XCTUnwrap(CameraAlignment.crop(region: region(), span: span, imageSize: image, stripAspect: 1.2))
+        XCTAssertLessThanOrEqual(crop.rect.height, 1)
+        XCTAssertEqual(crop.rect.width * 1920 / (crop.rect.height * 1080), Double(crop.aspect), accuracy: 1e-6)
+    }
+
+    func testStripPointCornersAndFlip() {
+        let crop = AlignedCrop(rect: CGRect(x: 0.2, y: 0.4, width: 0.5, height: 0.2), aspect: 5, flipX: false)
+        XCTAssertEqual(CameraAlignment.stripPoint(CGPoint(x: 0.2, y: 0.4), crop: crop), CGPoint(x: 0, y: 0))
+        XCTAssertEqual(CameraAlignment.stripPoint(CGPoint(x: 0.7, y: 0.6), crop: crop).x, 1, accuracy: 1e-9)
+        var flipped = crop; flipped.flipX = true
+        XCTAssertEqual(CameraAlignment.stripPoint(CGPoint(x: 0.2, y: 0.5), crop: flipped).x, 1, accuracy: 1e-9)
+    }
+}

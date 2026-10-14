@@ -51,6 +51,20 @@ final class AppModel: ObservableObject {
         var isFinished: Bool { index >= plan.steps.count }
     }
 
+    /// The stretch of keyboard currently on screen (see `SpanFollower`).
+    @Published private(set) var visibleSpan = KeyboardSpan.fitting(low: 60, high: 67, minimumWhiteKeys: 15)
+    private var spanFollower = SpanFollower()
+
+    /// Re-centres the on-screen window on the notes about to be played; animates when it jumps an octave.
+    func updateVisibleSpan() {
+        guard let lesson = session.lesson, let low = lesson.lowestNote, let high = lesson.highestNote else { return }
+        if spanFollower.limit != keyboardRange { spanFollower = SpanFollower(windowKeys: 15, limit: keyboardRange) }
+        let upcoming = session.noteProgress.indices
+            .filter { session.noteProgress[$0] == .pending }.prefix(4).map { lesson.notes[$0].noteNumber }
+        let next = spanFollower.update(lessonRange: low...high, upcoming: Array(upcoming))
+        if next != visibleSpan { withAnimation(.easeInOut(duration: 0.4)) { visibleSpan = next } }
+    }
+
     var dailyPlan: PracticePlan { PracticePlanner.dailyPlan(progress: progress, range: keyboardRange) }
 
     /// Songs that fit on the chosen keyboard size.
@@ -141,6 +155,7 @@ final class AppModel: ObservableObject {
         session.events.sink { [weak self] in self?.react(to: $0) }.store(in: &cancellables)
         // Forward nested changes so views observing only the model refresh.
         session.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
+        session.$targets.sink { [weak self] _ in self?.updateVisibleSpan() }.store(in: &cancellables)
     }
 
     func bootstrap() async {
@@ -198,6 +213,8 @@ final class AppModel: ObservableObject {
     func open(_ lesson: Lesson, returnTo: Screen = .songs) {
         session.load(lesson)
         lessonReturnScreen = returnTo
+        spanFollower = SpanFollower(windowKeys: 15, limit: keyboardRange)
+        updateVisibleSpan()
         screen = .lesson
         narrator.say("Let's play \(lesson.title)! Press the green button to start.")
     }

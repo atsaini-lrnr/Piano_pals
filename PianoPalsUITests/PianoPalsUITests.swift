@@ -191,6 +191,8 @@ final class PianoPalsPracticeUITests: XCTestCase {
         // Step 1 is the right-hand five-finger walk in C position: C D E F G F E D C.
         let stepLabel = { (n: Int) in app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Practice step \(n) of")).firstMatch }
         XCTAssertTrue(stepLabel(1).waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Play!"].waitForExistence(timeout: 5))
+        app.buttons["Play!"].tap()
         let walk = ["C4", "D4", "E4", "F4", "G4", "F4", "E4", "D4", "C4"]
         for name in walk {
             let key = app.buttons[name].firstMatch
@@ -221,7 +223,7 @@ final class PianoPalsLayoutUITests: XCTestCase {
         app.launch()
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 10))
-        let camera = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Side view'")).firstMatch
+        let camera = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Side view' OR label == 'Camera lined up with the keys'")).firstMatch
         let keyboard = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Piano keys'")).firstMatch
         XCTAssertTrue(camera.waitForExistence(timeout: 10))
         XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
@@ -230,6 +232,11 @@ final class PianoPalsLayoutUITests: XCTestCase {
         XCTAssertLessThanOrEqual(camera.frame.maxY, keyboard.frame.minY, "camera above keyboard")
         XCTAssertGreaterThan(camera.frame.height, screen.height * 0.22, "camera tile height \(camera.frame.height) of \(screen.height)")
         XCTAssertGreaterThan(camera.frame.width, screen.width * 0.4)
+        // With a calibrated camera the strip is as wide as the keyboard so keys line up one for one.
+        if camera.label == "Camera lined up with the keys" {
+            XCTAssertEqual(camera.frame.minX, keyboard.frame.minX, accuracy: 6, "strip and keyboard start at the same x")
+            XCTAssertEqual(camera.frame.width, keyboard.frame.width, accuracy: 8, "strip and keyboard are the same width")
+        }
         // L2: the keyboard runs (almost) edge to edge.
         XCTAssertGreaterThan(keyboard.frame.width, screen.width * 0.9, "keyboard width \(keyboard.frame.width) of \(screen.width)")
         // The key labelled for middle C is on screen for a C-position exercise.

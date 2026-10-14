@@ -8,6 +8,8 @@ struct HandOverlayView: View {
     var staleAfter: TimeInterval = 0.5
     /// `true` when the picture underneath is shown aspect-fit (letterboxed) rather than aspect-fill (cropped).
     var fit = false
+    /// When set, the picture is shown as an aligned strip that exactly fills the view.
+    var crop: AlignedCrop?
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: frame == nil)) { context in
@@ -26,7 +28,8 @@ struct HandOverlayView: View {
     private func draw(_ hand: TrackedHand, imageSize: CGSize, canvas: inout GraphicsContext, size: CGSize, pulse: Double) {
         let radius = max(15, size.height * 0.04)
         func point(_ joint: TrackedJoint, _ size: CGSize) -> CGPoint {
-            OverlayGeometry.viewPoint(joint.point, imageSize: imageSize, viewSize: size, fit: fit)
+            if let crop { return OverlayGeometry.viewPoint(joint.point, crop: crop, viewSize: size) }
+            return OverlayGeometry.viewPoint(joint.point, imageSize: imageSize, viewSize: size, fit: fit)
         }
 
         for (a, b) in JointID.bones {
