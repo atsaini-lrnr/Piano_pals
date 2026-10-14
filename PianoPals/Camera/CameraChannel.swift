@@ -278,7 +278,6 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let captureAngle = CGFloat(RotationMath.combined(base: captureBase, manual: manualRotation))
 
         for layer in previewLayers.allObjects {
-            layer.videoGravity = .resizeAspectFill
             guard let connection = layer.connection else { continue }
             if connection.isVideoRotationAngleSupported(previewAngle) { connection.videoRotationAngle = previewAngle }
             if connection.isVideoMirroringSupported {

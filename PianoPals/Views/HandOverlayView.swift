@@ -6,6 +6,8 @@ struct HandOverlayView: View {
     var highlight: Finger?
     /// Fades the overlay out if no new frame has arrived for a moment (hand left the picture).
     var staleAfter: TimeInterval = 0.5
+    /// `true` when the picture underneath is shown aspect-fit (letterboxed) rather than aspect-fill (cropped).
+    var fit = false
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: frame == nil)) { context in
@@ -14,19 +16,18 @@ struct HandOverlayView: View {
                 let age = HostClock.now - frame.timestamp
                 guard age < staleAfter else { return }
                 let pulse = 1 + 0.18 * sin(context.date.timeIntervalSinceReferenceDate * 7)
-                for hand in frame.hands { draw(hand, canvas: &canvas, size: size, pulse: pulse) }
+                for hand in frame.hands { draw(hand, imageSize: frame.imageSize, canvas: &canvas, size: size, pulse: pulse) }
             }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    private func point(_ joint: TrackedJoint, _ size: CGSize) -> CGPoint {
-        CGPoint(x: joint.point.x * size.width, y: joint.point.y * size.height)
-    }
-
-    private func draw(_ hand: TrackedHand, canvas: inout GraphicsContext, size: CGSize, pulse: Double) {
+    private func draw(_ hand: TrackedHand, imageSize: CGSize, canvas: inout GraphicsContext, size: CGSize, pulse: Double) {
         let radius = max(15, size.height * 0.04)
+        func point(_ joint: TrackedJoint, _ size: CGSize) -> CGPoint {
+            OverlayGeometry.viewPoint(joint.point, imageSize: imageSize, viewSize: size, fit: fit)
+        }
 
         for (a, b) in JointID.bones {
             guard let ja = hand.joint(a), let jb = hand.joint(b) else { continue }

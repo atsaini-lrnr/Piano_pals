@@ -52,7 +52,10 @@ final class CompanionHost: NSObject, ObservableObject, @unchecked Sendable {
                 DispatchQueue.main.async {
                     switch newState {
                     case .ready: self?.note = nil
-                    case .failed(let error): self?.note = "Couldn't start sharing (\(error.localizedDescription)). Check Local Network access in Settings."; self?.state = .stopped
+                    case .failed(let error):
+                        // The listener dies when the app is backgrounded or the screen locks. Start a fresh one shortly.
+                        self?.note = "Sharing stopped (\(error.localizedDescription)); restarting…"
+                        self?.restartListener()
                     default: break
                     }
                 }
@@ -63,6 +66,27 @@ final class CompanionHost: NSObject, ObservableObject, @unchecked Sendable {
         } catch {
             note = "Couldn't start sharing: \(error.localizedDescription)"
         }
+    }
+
+    /// Replaces a dead listener with a new one (the pairing code and any connected iPad are unaffected).
+    func restartListener() {
+        guard state != .stopped else { return }
+        listener?.cancel()
+        listener = nil
+        let keepConnected = state == .connected
+        if !keepConnected { state = .stopped }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.listener == nil else { return }
+            let previous = self.state
+            self.state = .stopped
+            self.start()
+            if previous == .connected { self.state = .connected }
+        }
+    }
+
+    /// Call when the app returns to the foreground.
+    func restartIfNeeded() {
+        if state == .stopped { start() } else if listener == nil { restartListener() }
     }
 
     func stop() {

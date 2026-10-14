@@ -296,3 +296,56 @@ final class VisionGeometryTests: XCTestCase {
         XCTAssertNil(FaceExpressionEstimator.estimate(outerLips: Array(repeating: CGPoint(x: 0.5, y: 0.5), count: 8), innerLips: []))
     }
 }
+
+final class OverlayGeometryTests: XCTestCase {
+    private let video = CGSize(width: 1920, height: 1080)   // 16:9 picture
+
+    func testSameShapeViewMapsStraightThrough() {
+        let view = CGSize(width: 960, height: 540)
+        for fit in [false, true] {
+            let p = OverlayGeometry.viewPoint(CGPoint(x: 0.25, y: 0.75), imageSize: video, viewSize: view, fit: fit)
+            XCTAssertEqual(p.x, 240, accuracy: 1e-6)
+            XCTAssertEqual(p.y, 405, accuracy: 1e-6)
+        }
+    }
+
+    /// The bug: a 19.5:9 phone screen shows a 16:9 picture aspect-FILL, cropping the top and bottom. Dots must move with the crop.
+    func testWideScreenCropsTheTopAndBottomWhenFilling() {
+        let phone = CGSize(width: 2000, height: 921)
+        let centre = OverlayGeometry.viewPoint(CGPoint(x: 0.5, y: 0.5), imageSize: video, viewSize: phone, fit: false)
+        XCTAssertEqual(centre.x, 1000, accuracy: 1e-6)
+        XCTAssertEqual(centre.y, 460.5, accuracy: 1e-6)
+        // The picture is scaled to 2000 × 1125, so its top edge is 102 pt above the screen.
+        let rect = OverlayGeometry.pictureRect(imageSize: video, viewSize: phone, fit: false)
+        XCTAssertEqual(rect.width, 2000, accuracy: 1e-6)
+        XCTAssertEqual(rect.height, 1125, accuracy: 1e-6)
+        XCTAssertEqual(rect.minY, -102, accuracy: 1e-6)
+        // A hand near the bottom of the picture (y = 0.9) is lower on screen than a naive y × height would put it.
+        let naive = 0.9 * phone.height
+        let mapped = OverlayGeometry.viewPoint(CGPoint(x: 0.5, y: 0.9), imageSize: video, viewSize: phone, fit: false).y
+        XCTAssertEqual(mapped - naive, 0.9 * 1125 - 102 - 0.9 * 921, accuracy: 1e-6)
+        XCTAssertGreaterThan(abs(mapped - naive), 20, "the old mapping was visibly off")
+    }
+
+    func testFitLeavesBarsAndKeepsTheWholePicture() {
+        let phone = CGSize(width: 2000, height: 921)
+        let rect = OverlayGeometry.pictureRect(imageSize: video, viewSize: phone, fit: true)
+        XCTAssertEqual(rect.height, 921, accuracy: 1e-6)
+        XCTAssertEqual(rect.width, 921 * 16 / 9, accuracy: 1e-6)
+        XCTAssertGreaterThan(rect.minX, 0, "bars at the sides")
+        XCTAssertEqual(OverlayGeometry.viewPoint(CGPoint(x: 0, y: 0), imageSize: video, viewSize: phone, fit: true), CGPoint(x: rect.minX, y: 0))
+        XCTAssertEqual(OverlayGeometry.viewPoint(CGPoint(x: 1, y: 1), imageSize: video, viewSize: phone, fit: true).y, 921, accuracy: 1e-6)
+    }
+
+    func testTallViewCropsTheSidesWhenFilling() {
+        let portrait = CGSize(width: 400, height: 900)
+        let rect = OverlayGeometry.pictureRect(imageSize: video, viewSize: portrait, fit: false)
+        XCTAssertEqual(rect.height, 900, accuracy: 1e-6)
+        XCTAssertLessThan(rect.minX, 0)
+    }
+
+    func testUnknownImageSizeFallsBackToTheViewSize() {
+        let p = OverlayGeometry.viewPoint(CGPoint(x: 0.5, y: 0.5), imageSize: .zero, viewSize: CGSize(width: 100, height: 50), fit: false)
+        XCTAssertEqual(p, CGPoint(x: 50, y: 25))
+    }
+}

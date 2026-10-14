@@ -10,6 +10,7 @@ struct CompanionRootView: View {
             .preferredColorScheme(.dark)
             .statusBarHidden()
             .task { await model.start() }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { model.host.restartIfNeeded() } }
     }
 }
 
@@ -26,39 +27,44 @@ private struct CompanionContent: View {
             } else if model.noCamera && !UserDefaults.standard.bool(forKey: "demoHands") {
                 message(icon: "video", text: "No camera found on this device.")
             } else {
-                CameraPreviewView(channel: channel).ignoresSafeArea()
-                HandOverlayView(frame: channel.latestFrame, highlight: nil)
+                // Aspect-FIT so the whole picture is visible: exactly what the iPad receives and what hand tracking sees.
+                CameraPreviewView(channel: channel, gravity: .resizeAspect).ignoresSafeArea()
+                HandOverlayView(frame: channel.latestFrame, highlight: nil, fit: true)
             }
 
+            // Controls live on the right edge and the status on the top-left, so the middle (where the hands are) stays clear.
             VStack {
-                HStack(spacing: 10) {
-                    statusChip
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        statusChip
+                        if host.state != .connected { pairingPanel }
+                    }
                     Spacer()
-                    Text("Piano Pals camera").font(.system(size: 15, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                    VStack(spacing: 12) {
+                        control("camera.rotate.fill", "Switch camera") { model.switchCamera() }
+                        control("rotate.right.fill", "Turn picture") { channel.manualRotation = (channel.manualRotation + 90) % 360 }
+                        control("arrow.left.and.right.righttriangle.left.righttriangle.right.fill", "Flip") { channel.flipHorizontally.toggle() }
+                    }
                 }
                 .padding(.horizontal, 16).padding(.top, 10)
                 Spacer()
-                HStack(spacing: 14) {
-                    control("camera.rotate.fill", "Switch camera") { model.switchCamera() }
-                    control("rotate.right.fill", "Turn picture") { channel.manualRotation = (channel.manualRotation + 90) % 360 }
-                    control("arrow.left.and.right.righttriangle.left.righttriangle.right.fill", "Flip") { channel.flipHorizontally.toggle() }
-                }
-                .padding(.bottom, 14)
-                if host.state != .connected {
-                    VStack(spacing: 4) {
-                        Text("Pairing code").font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.7))
-                        Text(CompanionSecurity.display(host.pairingCode))
-                            .font(.system(size: 34, weight: .heavy, design: .monospaced)).foregroundStyle(.white)
-                        Text("On the iPad: Grown-ups ▸ Choose cameras ▸ pick this iPhone ▸ type the code. Point this iPhone down at the keys.")
-                            .font(.system(size: 13, weight: .medium, design: .rounded)).foregroundStyle(.white.opacity(0.8))
-                            .multilineTextAlignment(.center).padding(.horizontal, 24)
-                        if let note = host.note { Text(note).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 24) }
-                    }
-                    .padding(.bottom, 10)
-                }
             }
-
         }
+    }
+
+    private var pairingPanel: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Pairing code").font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.75))
+            Text(CompanionSecurity.display(host.pairingCode))
+                .font(.system(size: 26, weight: .heavy, design: .monospaced)).foregroundStyle(.white)
+            Text("iPad: Grown-ups ▸ Choose cameras ▸ pick this iPhone ▸ type the code.")
+                .font(.system(size: 11, weight: .medium, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+            if let note = host.note { Text(note).font(.system(size: 11)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+        }
+        .padding(10)
+        .frame(maxWidth: 300, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.black.opacity(0.55)))
     }
 
     private var statusChip: some View {
