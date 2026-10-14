@@ -7,6 +7,8 @@ Status: ✅ done & verified · 🟡 built, needs real-world check (device / hard
 
 Last updated: 2026-10-14
 
+Live board (cards, owner, progress log): https://claude.ai/artifact/JdcUVmY8p43DXki6A1Yauk — kept in step with this page after every commit.
+
 ## A. Core (PRD.md — v1 brief)
 
 | ID | Requirement | Status | Notes |
@@ -51,6 +53,7 @@ Last updated: 2026-10-14
 | F13 / E1–E5 | Beginner exercises, scales RH/LH, daily practice block | ✅ E1–E5 (UI-tested) | |
 | F14 / W1–W6 | Search the web (Mutopia, Wikimedia Commons) for grown-ups, licence-gated, convert to lesson | ✅ W1–W4, W6 (unit + UI tests) · W5 live: 10/10 titles had ≥1 open-licence MIDI; end-to-end add of “Ode to Joy” verified in simulator | `OnlineMelodySearch.swift`; explicit button, licence badges |
 | F15 / T1–T6 | On-device audio → notes (Basic Pitch Core ML + YIN fallback) | ⬜ ⛔ T5 | needs model download approval + test clip |
+| F16 (NEW, from board) | Free "AI-MIDI / Songscription / YouTube-to-MIDI" style conversion: write-up of what it takes and which parts are free | ⬜ | overlaps F15; YouTube audio extraction breaks YouTube's terms, so link → title only |
 | MAC | Runs on Mac (Catalyst) | 🟡 | builds & tests pass; user hasn't looked yet |
 
 ## D. Order of work (don't skip ahead)

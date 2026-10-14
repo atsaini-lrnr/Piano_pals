@@ -169,6 +169,7 @@ final class PianoPalsAIFlowUITests: XCTestCase {
         }
         XCTAssertTrue(app.staticTexts["You did it!"].waitForExistence(timeout: 5))
         app.buttons["More songs"].tap()
+        XCTAssertTrue(app.staticTexts["Pick a song!"].waitForExistence(timeout: 5))
         app.buttons["Home"].tap()
         let gate = app.buttons["Grown-ups: hold"].firstMatch
         XCTAssertTrue(gate.waitForExistence(timeout: 5))
