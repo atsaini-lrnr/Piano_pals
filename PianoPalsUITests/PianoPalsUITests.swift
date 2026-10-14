@@ -209,3 +209,30 @@ final class PianoPalsPracticeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Scales"].waitForExistence(timeout: 10) || app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Scales'")).firstMatch.waitForExistence(timeout: 5))
     }
 }
+
+
+final class PianoPalsLayoutUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    func testCameraSitsAboveTheLessonAndTheKeyboardSpansTheScreen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO", "-debugScreen", "lesson",
+                               "-debugSong", "five finger", "-demoHands", "YES"]
+        app.launch()
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let camera = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Side view'")).firstMatch
+        let keyboard = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Piano keys'")).firstMatch
+        XCTAssertTrue(camera.waitForExistence(timeout: 10))
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        let screen = window.frame
+        // L1: the camera is above the lesson (not beside it) and is a substantial part of the screen.
+        XCTAssertLessThanOrEqual(camera.frame.maxY, keyboard.frame.minY, "camera above keyboard")
+        XCTAssertGreaterThan(camera.frame.height, screen.height * 0.22, "camera tile height \(camera.frame.height) of \(screen.height)")
+        XCTAssertGreaterThan(camera.frame.width, screen.width * 0.4)
+        // L2: the keyboard runs (almost) edge to edge.
+        XCTAssertGreaterThan(keyboard.frame.width, screen.width * 0.9, "keyboard width \(keyboard.frame.width) of \(screen.width)")
+        // The key labelled for middle C is on screen for a C-position exercise.
+        XCTAssertTrue(app.buttons["C4"].exists)
+    }
+}

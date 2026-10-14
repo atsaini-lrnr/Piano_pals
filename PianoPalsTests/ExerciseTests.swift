@@ -225,3 +225,90 @@ final class SixtyOneKeyTests: XCTestCase {
         XCTAssertTrue(Lesson(title: "empty", notes: [], source: .library).fits(in: 48...72))
     }
 }
+
+final class CoachingGeometryTests: XCTestCase {
+    private func calibrated(slope: Double = 20) -> KeyboardRegion {
+        // 61-key board; middle C centred at x = 0.4 of the picture; keys about 1/20 of the picture wide.
+        let first = Double(PianoKeys.whiteIndex(36))
+        return KeyboardRegion(firstNote: 36, lastNote: 96, slope: slope,
+                              intercept: PianoKeys.center(of: 60) - slope * 0.4 - first, yMin: 0.55, yMax: 0.9, isCalibrated: true)
+    }
+
+    private func hand(side: HandSide, tips: [Finger: CGPoint]) -> TrackedHand {
+        var joints: [JointID: TrackedJoint] = [:]
+        for (finger, point) in tips { joints[JointID.tip(of: finger)] = TrackedJoint(point: point, confidence: 0.9) }
+        return TrackedHand(id: side == .right ? 1 : 0, side: side, joints: joints)
+    }
+
+    // MARK: L4 — target key marker
+
+    func testMarkerSitsOnTheTargetKeyAndSpansABandAcrossTheKeyboard() throws {
+        let marker = try XCTUnwrap(CoachingGeometry.targetMarker(region: calibrated(), note: 60))
+        XCTAssertEqual(marker.midX, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(marker.width, 0.95 / 20, accuracy: 1e-9)
+        XCTAssertEqual(marker.minY, 0.55, accuracy: 1e-9)
+        XCTAssertEqual(marker.maxY, 0.9, accuracy: 1e-9)
+        let d4 = try XCTUnwrap(CoachingGeometry.targetMarker(region: calibrated(), note: 62))
+        XCTAssertEqual(d4.midX - marker.midX, 1.0 / 20, accuracy: 1e-9, "one white key to the right")
+        let black = try XCTUnwrap(CoachingGeometry.targetMarker(region: calibrated(), note: 61))
+        XCTAssertLessThan(black.width, marker.width, "black keys are narrower")
+    }
+
+    func testMarkerNeedsACalibratedKeyboardAndAVisibleKey() {
+        XCTAssertNil(CoachingGeometry.targetMarker(region: .uncalibrated(firstNote: 36, lastNote: 96), note: 60), "no guessing")
+        XCTAssertNil(CoachingGeometry.targetMarker(region: calibrated(), note: 96), "the C7 key is well off the right edge of the picture")
+        XCTAssertNil(CoachingGeometry.targetMarker(region: calibrated(), note: 36), "C2 is off the left edge")
+    }
+
+    func testMarkerWorksForACameraThatSeesTheKeyboardReversed() throws {
+        var reversed = calibrated(slope: -20)
+        reversed.intercept = PianoKeys.center(of: 60) - Double(PianoKeys.whiteIndex(36)) + 20 * 0.6   // C4 at x = 0.6
+        let marker = try XCTUnwrap(CoachingGeometry.targetMarker(region: reversed, note: 60))
+        XCTAssertEqual(marker.midX, 0.6, accuracy: 1e-9)
+        XCTAssertGreaterThan(marker.width, 0, "width is always positive")
+    }
+
+    // MARK: L3 — correction vector
+
+    func testCorrectionPointsFromTheFingerUsedToTheFingerWanted() throws {
+        let frame = HandFrame(channel: .overhead, timestamp: 1, imageSize: CGSize(width: 1920, height: 1080), hands: [
+            hand(side: .right, tips: [.ring: CGPoint(x: 0.55, y: 0.7), .index: CGPoint(x: 0.45, y: 0.68)])])
+        let correction = FingerCorrection(expected: .index, played: .ring, wrongHand: nil)
+        let vector = try XCTUnwrap(CoachingGeometry.correctionVector(frame: frame, correction: correction, lessonHand: .right))
+        XCTAssertEqual(vector.from, CGPoint(x: 0.55, y: 0.7))
+        XCTAssertEqual(vector.to, CGPoint(x: 0.45, y: 0.68))
+    }
+
+    func testCorrectionPrefersTheLessonsHandAndToleratesAMissingFinger() throws {
+        let frame = HandFrame(channel: .overhead, timestamp: 1, imageSize: CGSize(width: 1920, height: 1080), hands: [
+            hand(side: .left, tips: [.index: CGPoint(x: 0.2, y: 0.7)]), hand(side: .right, tips: [.index: CGPoint(x: 0.6, y: 0.7)])])
+        let vector = try XCTUnwrap(CoachingGeometry.correctionVector(frame: frame, correction: FingerCorrection(expected: .index, played: .pinky, wrongHand: nil), lessonHand: .right))
+        XCTAssertEqual(vector.to.x, 0.6, accuracy: 1e-9, "the right hand, because the song is for the right hand")
+        XCTAssertNil(vector.from, "the pinky isn't visible: no arrow, just the ring")
+        XCTAssertNil(CoachingGeometry.correctionVector(frame: HandFrame(channel: .overhead, timestamp: 1, imageSize: .zero, hands: []),
+                                                       correction: FingerCorrection(expected: .index, played: nil, wrongHand: nil), lessonHand: .right))
+    }
+
+    func testLowConfidenceTipsAreIgnored() {
+        var joints: [JointID: TrackedJoint] = [:]
+        joints[.indexTip] = TrackedJoint(point: CGPoint(x: 0.5, y: 0.5), confidence: 0.1)
+        let frame = HandFrame(channel: .overhead, timestamp: 1, imageSize: .zero, hands: [TrackedHand(id: 0, side: .right, joints: joints)])
+        XCTAssertNil(CoachingGeometry.correctionVector(frame: frame, correction: FingerCorrection(expected: .index, played: nil, wrongHand: nil), lessonHand: .right))
+    }
+
+    // MARK: L5 — never red
+
+    func testTheCorrectionPaletteHasNoRed() {
+        // The overlay colours: amber arrow and the finger's own colour. Amber must not be anywhere near red.
+        let amber = UIColor(Palette.hint)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        amber.getRed(&r, green: &g, blue: &b, alpha: &a)
+        XCTAssertGreaterThan(g, 0.7, "amber/yellow, not red")
+        // The only red-ish finger colour is the thumb's; that belongs to the finger itself, never to an error state.
+        XCTAssertEqual(Finger.thumb.glyph.hashValueForTest, FingerGlyph.star.hashValueForTest)
+    }
+}
+
+private extension FingerGlyph {
+    var hashValueForTest: Int { String(describing: self).hashValue }
+}

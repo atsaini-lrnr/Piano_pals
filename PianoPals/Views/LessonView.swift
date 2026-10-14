@@ -30,14 +30,12 @@ private struct LessonContent: View {
         GeometryReader { geo in
             ZStack {
                 Palette.background.ignoresSafeArea()
-                VStack(spacing: 14) {
+                VStack(spacing: 10) {
                     header
-                    HStack(alignment: .top, spacing: 18) {
-                        gameColumn
-                        sideColumn.frame(width: geo.size.width * 0.34)
-                    }
+                    cameraSection(height: max(geo.size.height * 0.34, 200))
+                    gameColumn
                 }
-                .padding(.horizontal, 22).padding(.vertical, 14)
+                .padding(.horizontal, 22).padding(.vertical, 12)
 
                 ConfettiView(model: confetti).ignoresSafeArea()
 
@@ -48,6 +46,37 @@ private struct LessonContent: View {
         .onChange(of: session.targets) { _, targets in
             if let note = targets.first?.note.noteNumber { avatar.lookAt = span.fraction(of: note) * 2 - 1 }
         }
+    }
+
+    // MARK: Camera section (top)
+
+    private func cameraSection(height: CGFloat) -> some View {
+        HStack(spacing: 12) {
+            ZStack(alignment: .topLeading) {
+                VStack {
+                    AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt)
+                        .frame(width: 190, height: 200)
+                    Spacer(minLength: 0)
+                }
+                if let message = model.coachMessage {
+                    Text(message)
+                        .font(.kid(20, weight: .bold))
+                        .foregroundStyle(Palette.ink)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white))
+                        .shadow(color: .black.opacity(0.15), radius: 4, y: 3)
+                        .frame(maxWidth: 240, alignment: .leading)
+                        .transition(.scale(scale: 0.8, anchor: .bottomLeading).combined(with: .opacity))
+                        .accessibilityLabel(message)
+                }
+            }
+            .frame(width: 190)
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
+
+            CameraBand(hub: cameras, highlight: session.targets.first?.note.finger, demoHands: settings.demoHands,
+                       coaching: { model.coachingContext(for: $0) }) { app.showCameraPicker = true }
+        }
+        .frame(height: height)
     }
 
     // MARK: Header
@@ -144,34 +173,7 @@ private struct LessonContent: View {
             KeyboardView(span: span, targets: session.targets, feedback: session.keyFeedback, pressed: midi.pressedNotes) { note, down in
                 app.virtualKey(note, isDown: down)
             }
-            .frame(height: 230)
-        }
-    }
-
-    // MARK: Side column
-
-    private var sideColumn: some View {
-        VStack(spacing: 14) {
-            ZStack(alignment: .topLeading) {
-                AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt)
-                    .frame(height: 210)
-                if let message = model.coachMessage {
-                    Text(message)
-                        .font(.kid(22, weight: .bold))
-                        .foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white))
-                        .shadow(color: .black.opacity(0.15), radius: 4, y: 3)
-                        .frame(maxWidth: 300, alignment: .leading)
-                        .transition(.scale(scale: 0.8, anchor: .bottomLeading).combined(with: .opacity))
-                        .accessibilityLabel(message)
-                }
-            }
-            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
-            CameraPanel(hub: cameras, highlight: session.targets.first?.note.finger, demoHands: settings.demoHands) {
-                app.showCameraPicker = true
-            }
-            Spacer(minLength: 0)
+            .frame(height: 210)
         }
     }
 

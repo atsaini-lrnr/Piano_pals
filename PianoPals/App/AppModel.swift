@@ -30,6 +30,9 @@ final class AppModel: ObservableObject {
     /// What the coach just said (shown in the panda's bubble) and which finger it wants the child to look at.
     @Published private(set) var coachMessage: String?
     @Published private(set) var fingerCue: Finger?
+    /// Shown on the camera view for a few seconds after the right key is played with the wrong finger or hand.
+    @Published private(set) var correction: FingerCorrection?
+    private var correctionTask: Task<Void, Never>?
     @Published private(set) var progress: [SessionSummary] = []
     /// Plain-language note for the grown-up about the latest session.
     @Published private(set) var parentNote: String?
@@ -378,6 +381,14 @@ final class AppModel: ObservableObject {
             break
         }
 
+        if case .noteHit(_, let note, let quality) = event {
+            switch quality {
+            case .fingerOff(let played): showCorrection(FingerCorrection(expected: note.finger, played: played, wrongHand: nil))
+            case .wrongHand(let side): showCorrection(FingerCorrection(expected: note.finger, played: nil, wrongHand: side))
+            case .perfect, .fingerUnverified: break
+            }
+        }
+
         // Mistakes → coach.
         var actions: [CoachAction] = []
         if case .started = event {
@@ -419,6 +430,23 @@ final class AppModel: ObservableObject {
                 if let tempoScale { settings.tempoScale = tempoScale }
             }
         }
+    }
+
+    private func showCorrection(_ new: FingerCorrection) {
+        correction = new
+        correctionTask?.cancel()
+        correctionTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.correction = nil
+        }
+    }
+
+    /// What the camera tile needs in order to coach on `channel`.
+    func coachingContext(for channel: CameraChannelID) -> CoachingContext? {
+        guard session.phase == .playing || session.phase == .ready || session.phase == .paused || correction != nil else { return nil }
+        return CoachingContext(region: region(for: channel), target: session.targets.first?.note, correction: correction,
+                               lessonHand: session.lesson?.hand ?? .right)
     }
 
     private func show(message: String) {

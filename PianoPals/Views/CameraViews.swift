@@ -7,6 +7,7 @@ struct CameraTile: View {
     var highlight: Finger?
     var isTracking = false
     var demoBackdrop = false
+    var coaching: CoachingContext?
     var placeholderButton: (title: String, action: () -> Void)?
 
     var body: some View {
@@ -23,6 +24,9 @@ struct CameraTile: View {
                 }
             }
             HandOverlayView(frame: channel.latestFrame, highlight: highlight)
+            if let coaching, channel.state == .running || demoBackdrop {
+                CoachingOverlayView(frame: channel.latestFrame, context: coaching, imageSize: channel.latestFrame?.imageSize ?? channel.videoSize)
+            }
 
             VStack {
                 HStack {
@@ -73,8 +77,8 @@ struct CameraTile: View {
                 }
             } else {
                 LinearGradient(colors: [Color(white: 0.22), Color(white: 0.12)], startPoint: .top, endPoint: .bottom)
-                VStack(spacing: 10) {
-                    Image(systemName: icon).font(.system(size: 44, weight: .bold))
+                VStack(spacing: 8) {
+                    Image(systemName: icon).font(.system(size: 34, weight: .bold)).padding(.top, 30)
                     Text(message).font(.kid(20, weight: .bold)).multilineTextAlignment(.center)
                     if let placeholderButton {
                         Button(action: placeholderButton.action) {
@@ -163,6 +167,51 @@ struct CameraPanel: View {
                    highlight: highlight,
                    isTracking: hub.trackingChannel == id,
                    demoBackdrop: demoHands && id == .primary && hub.channel(id).state != .running,
+                   placeholderButton: id == .overhead && hub.channel(id).state != .running && hub.authorization == .authorized
+                       ? ("Use my iPhone", onChoose) : nil)
+    }
+}
+
+/// The camera section across the top of the lesson: both views side by side, as large as the height allows.
+struct CameraBand: View {
+    @ObservedObject var hub: CameraHub
+    var highlight: Finger?
+    var demoHands: Bool
+    var coaching: (CameraChannelID) -> CoachingContext?
+    var onChoose: () -> Void
+
+    var body: some View {
+        switch hub.layout {
+        case .grid:
+            let overheadLive = hub.overhead.state == .running
+            GeometryReader { geo in
+                HStack(spacing: 12) {
+                    Spacer(minLength: 0)
+                    tile(.primary)
+                    tile(.overhead).frame(width: overheadLive ? nil : geo.size.width * 0.26)
+                    Spacer(minLength: 0)
+                }
+            }
+        case .pip:
+            let large = hub.pipLargeChannel
+            let small: CameraChannelID = large == .primary ? .overhead : .primary
+            ZStack(alignment: .bottomTrailing) {
+                tile(large)
+                tile(small).frame(width: 220).padding(10)
+                    .onTapGesture { withAnimation(.spring) { hub.pipLargeChannel = small } }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Swap the big and small camera")
+            }
+        }
+    }
+
+    private func tile(_ id: CameraChannelID) -> some View {
+        CameraTile(channel: hub.channel(id),
+                   title: id == .primary ? "Side view" : "Top view",
+                   highlight: highlight,
+                   isTracking: hub.trackingChannel == id,
+                   demoBackdrop: demoHands && id == .primary && hub.channel(id).state != .running,
+                   coaching: coaching(id),
                    placeholderButton: id == .overhead && hub.channel(id).state != .running && hub.authorization == .authorized
                        ? ("Use my iPhone", onChoose) : nil)
     }
