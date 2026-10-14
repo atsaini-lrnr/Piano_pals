@@ -49,7 +49,7 @@ Last updated: 2026-10-14
 | K61 | Tuned for 61-key board (C2–C7), never shows keys it lacks | ✅ | |
 | **P1 (NEW, asked 2026-10-14)** | **Keyboard window pans by whole octaves to follow the music** | ✅ code + 6 unit tests · 🟡 on-device look | `SpanFollower`; lane, keys, strip share one span |
 | F13 / E1–E5 | Beginner exercises, scales RH/LH, daily practice block | ✅ E1–E5 (UI-tested) | |
-| F14 / W1–W6 | Search the web (Mutopia, Wikimedia Commons) for grown-ups, licence-gated, convert to lesson | ⬜ | researched; next |
+| F14 / W1–W6 | Search the web (Mutopia, Wikimedia Commons) for grown-ups, licence-gated, convert to lesson | ✅ W1–W4, W6 (unit + UI tests) · W5 live: 10/10 titles had ≥1 open-licence MIDI; end-to-end add of “Ode to Joy” verified in simulator | `OnlineMelodySearch.swift`; explicit button, licence badges |
 | F15 / T1–T6 | On-device audio → notes (Basic Pitch Core ML + YIN fallback) | ⬜ ⛔ T5 | needs model download approval + test clip |
 | MAC | Runs on Mac (Catalyst) | 🟡 | builds & tests pass; user hasn't looked yet |
 
@@ -57,7 +57,7 @@ Last updated: 2026-10-14
 
 1. ~~P1 panning~~ done
 2. ~~E5 / L-series UI tests~~ done
-3. F14 web search (W1–W6)
+3. ~~F14 web search (W1–W6)~~ done
 4. F15 transcription (T1–T4 pure code first; T5/T6 after user approves the model + supplies a clip)
 5. Real-world checks (D1–D9, iPhone link retest, Mac look)
 

@@ -26,6 +26,16 @@ final class AppModel: ObservableObject {
     @Published var showCameraPicker = false
     @Published private(set) var songs: [Lesson]
     @Published private(set) var generation: GenerationState = .idle
+    /// The grown-up's explicit "search the web" for a song that isn't in the free library.
+    enum WebSearchState: Equatable {
+        case idle
+        case searching(String)
+        case results(query: String, [OnlineCandidate])
+        case adding(OnlineCandidate)
+        case failed(String)
+    }
+    @Published private(set) var webSearch: WebSearchState = .idle
+    var onlineSearch: OnlineMelodySearching = OnlineMelodySearch()
     @Published private(set) var regions: [CameraChannelID: KeyboardRegion] = [:]
     /// What the coach just said (shown in the panda's bubble) and which finger it wants the child to look at.
     @Published private(set) var coachMessage: String?
@@ -265,6 +275,7 @@ final class AppModel: ObservableObject {
 
     func generateLesson(from text: String) async {
         generation = .working
+        webSearch = .idle
         do {
             switch try await generator.generateLesson(from: text, hand: settings.lessonHand) {
             case .lesson(let lesson, let origin):
@@ -285,6 +296,33 @@ final class AppModel: ObservableObject {
             generation = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }
+
+    /// Looks on Mutopia and Wikimedia Commons (open licences only). Only the search words are sent.
+    func searchWeb(for query: String) async {
+        webSearch = .searching(query)
+        do {
+            let found = try await onlineSearch.search(query)
+            webSearch = found.isEmpty ? .failed("Nothing with an open licence matched “\(query)”. Try the composer's name, or play it near the iPad with Listen.") : .results(query: query, found)
+        } catch {
+            webSearch = .failed("Couldn't reach the music websites. Check the internet connection and try again.")
+        }
+    }
+
+    /// Downloads one chosen file (≤ 600 KB, must be real MIDI) and turns the opening melody into a lesson.
+    func addOnline(_ candidate: OnlineCandidate, from query: String) async {
+        webSearch = .adding(candidate)
+        do {
+            let data = try await onlineSearch.download(candidate)
+            let lesson = try OnlineImport.lesson(from: data, candidate: candidate, hand: settings.lessonHand)
+            add(lesson)
+            webSearch = .idle
+            generation = .added(message: "Added “\(lesson.title)” from \(candidate.site.rawValue) (\(candidate.licence)).", lesson: lesson)
+        } catch {
+            webSearch = .failed((error as? LocalizedError)?.errorDescription ?? "That one didn't work. Try another result.")
+        }
+    }
+
+    func clearWebSearch() { webSearch = .idle }
 
     /// Adds a library suggestion the grown-up picked from the not-found card.
     func addSuggestion(_ song: LibrarySong) {
@@ -586,6 +624,14 @@ extension AppModel {
         }
         if let query = defaults.string(forKey: "debugQuery") {
             Task { @MainActor in await generateLesson(from: query) }
+        }
+        if let web = defaults.string(forKey: "debugWebSearch") {
+            Task { @MainActor in
+                await searchWeb(for: web)
+                if defaults.bool(forKey: "debugWebAddFirst"), case .results(let query, let found) = webSearch, let first = found.first {
+                    await addOnline(first, from: query)
+                }
+            }
         }
         if defaults.bool(forKey: "debugGrownUps") { showGrownUps = true }
         if defaults.bool(forKey: "debugCameraPicker") { showCameraPicker = true }

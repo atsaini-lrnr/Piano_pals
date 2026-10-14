@@ -121,6 +121,16 @@ final class PianoPalsAIFlowUITests: XCTestCase {
         XCTAssertFalse(element(containing: "Added", in: app).exists, "nothing was added automatically")
     }
 
+    func testWebSearchIsExplicitAndSaysWhichSitesGetTheWords() {
+        let app = launch(["-debugGrownUps", "YES", "-debugQuery", "Jingle Bell Rock"])
+        XCTAssertTrue(element(containing: "isn't in the free song library", in: app).waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["webSearchButton"].exists, "a one-tap web search is offered")
+        let notice = element(containing: "mutopiaproject.org", in: app)
+        XCTAssertTrue(notice.exists, "the screen says which sites get the search words")
+        XCTAssertTrue(element(containing: "No sound, pictures or camera data leave the iPad", in: app).exists)
+        XCTAssertFalse(element(containing: "Free to use", in: app).exists, "nothing is searched until the grown-up taps")
+    }
+
     func testKnownSongIsFoundOffline() {
         let app = launch(["-debugGrownUps", "YES", "-debugQuery", "twinkel twinkle little star lyrics"])
         XCTAssertTrue(element(containing: "found in the free song library", in: app).waitForExistence(timeout: 15))

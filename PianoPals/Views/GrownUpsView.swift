@@ -327,10 +327,62 @@ private struct NotFoundCard: View {
                     .buttonStyle(.bordered)
                 }
             }
+            WebSearchBlock(query: info.resolvedTitle ?? info.query, app: app)
             Text("You can also play or hum it near the iPad (Listen to a song…) or import a MIDI file.").font(.footnote).foregroundStyle(.secondary)
             Button("Make a practice tune anyway (not the real song)") { app.makePracticeTune(for: info.resolvedTitle ?? info.query) }
                 .buttonStyle(.bordered)
         }
         .padding(.vertical, 4)
+    }
+}
+
+
+/// Explicit, explained web search: the grown-up taps once; only the words go to two free music sites; results show their licence.
+private struct WebSearchBlock: View {
+    let query: String
+    @ObservedObject var app: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch app.webSearch {
+            case .idle:
+                Button {
+                    Task { await app.searchWeb(for: query) }
+                } label: {
+                    Label("Search free music websites for “\(query)”", systemImage: "globe")
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("webSearchButton")
+                Text("This sends only the words “\(query)” to \(OnlineMelodySearch.sites). No sound, pictures or camera data leave the iPad. Only files with open licences (public domain, CC0, CC BY, CC BY-SA) are shown.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            case .searching(let words):
+                HStack { ProgressView(); Text("Looking for “\(words)”…") }
+            case .results(let words, let found):
+                Text("Free to use:").font(.subheadline.weight(.semibold))
+                ForEach(found) { candidate in
+                    Button {
+                        Task { await app.addOnline(candidate, from: words) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(candidate.title).font(.body.weight(.semibold))
+                                Spacer()
+                                Image(systemName: "plus.circle.fill")
+                            }
+                            Text([candidate.composer, candidate.instrument].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text("\(candidate.site.rawValue) · \(candidate.licence)").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Text("Adding makes a lesson from the opening melody. The file itself isn't kept.").font(.footnote).foregroundStyle(.secondary)
+            case .adding(let candidate):
+                HStack { ProgressView(); Text("Making a lesson from “\(candidate.title)”…") }
+            case .failed(let message):
+                Label(message, systemImage: "info.circle").foregroundStyle(.secondary)
+                Button("Try again") { app.clearWebSearch() }.buttonStyle(.bordered)
+            }
+        }
     }
 }

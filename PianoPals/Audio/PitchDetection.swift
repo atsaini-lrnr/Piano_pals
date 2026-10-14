@@ -194,7 +194,8 @@ enum ListenTranscriber {
     static let maximumNotes = 64
 
     /// Evens out rhythm, shortens long silences, shifts whole octaves into the hand's comfortable register, and fingers it.
-    static func lesson(from heard: [RawNote], hand: HandSide, title: String = "Heard tune") -> Lesson? {
+    static func lesson(from heard: [RawNote], hand: HandSide, title: String = "Heard tune",
+                       description: String = "Heard on this iPad and fingered locally (sound was not recorded)", emoji: String = "🎤") -> Lesson? {
         let notes = Array(heard.sorted { $0.start < $1.start }.prefix(maximumNotes))
         guard notes.count >= minimumNotes else { return nil }
 
@@ -226,6 +227,6 @@ enum ListenTranscriber {
             cursor += length
         }
         return LocalLessonEngine().lesson(title: title, rawNotes: raw, hand: hand, tempoBPM: 60 / beat, source: .imported,
-                                          description: "Heard on this iPad and fingered locally (sound was not recorded)", emoji: "🎤")
+                                          description: description, emoji: emoji)
     }
 }
