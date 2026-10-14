@@ -20,6 +20,7 @@ private struct GrownUpsContent: View {
 
     @State private var songText = ""
     @State private var importing = false
+    @State private var importingAudio = false
     @State private var listening = false
     @FocusState private var fieldFocused: Bool
 
@@ -39,6 +40,9 @@ private struct GrownUpsContent: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $listening) { ListenView(app: app) }
+            .fileImporter(isPresented: $importingAudio, allowedContentTypes: [.audio]) { result in
+                if case .success(let url) = result { Task { await app.transcribeRecording(at: url) } }
+            }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.midi]) { result in
                 if case .success(let url) = result { app.importMIDIFile(at: url) }
             }
@@ -71,6 +75,18 @@ private struct GrownUpsContent: View {
                 Button("Listen to a song…") { listening = true }.buttonStyle(.bordered)
                 Button("Import MIDI…") { importing = true }.buttonStyle(.bordered)
             }
+            HStack {
+                Button { importingAudio = true } label: { Label("Make a lesson from a recording…", systemImage: "waveform") }
+                    .buttonStyle(.bordered)
+                    .disabled(app.transcribing != nil)
+                    .accessibilityIdentifier("recordingButton")
+                if let progress = app.transcribing {
+                    ProgressView(value: progress).frame(maxWidth: 140)
+                    Text("Finding the notes…").font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            Text("Pick a short piano or single-voice recording (up to 90 seconds). The notes are found on this iPad with the free Basic Pitch model from Spotify (Apache-2.0). The recording is not uploaded or kept.")
+                .font(.footnote).foregroundStyle(.secondary)
             switch app.generation {
             case .added(let message, let lesson):
                 VStack(alignment: .leading, spacing: 8) {

@@ -35,6 +35,8 @@ final class AppModel: ObservableObject {
         case failed(String)
     }
     @Published private(set) var webSearch: WebSearchState = .idle
+    /// 0…1 while a recording is being turned into notes; nil otherwise.
+    @Published private(set) var transcribing: Double?
     var onlineSearch: OnlineMelodySearching = OnlineMelodySearch()
     @Published private(set) var regions: [CameraChannelID: KeyboardRegion] = [:]
     /// What the coach just said (shown in the panda's bubble) and which finger it wants the child to look at.
@@ -343,6 +345,31 @@ final class AppModel: ObservableObject {
         songs.insert(lesson, at: 0)
     }
 
+    /// Turns a recording (wav, m4a, mp3…) into lessons on this iPad. Nothing is uploaded and the recording isn't kept.
+    func transcribeRecording(at url: URL) async {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard transcribing == nil else { return }
+        transcribing = 0
+        generation = .idle
+        let title = url.deletingPathExtension().lastPathComponent
+        do {
+            let result = try await Task.detached(priority: .userInitiated) { [weak self] in
+                try RecordingTranscriber().transcribe(url: url, title: title) { fraction in
+                    Task { @MainActor in self?.transcribing = fraction }
+                }
+            }.value
+            for lesson in result.lessons.reversed() { add(lesson) }
+            let hands = result.lessons.count == 2 ? "right and left hand" : "right hand"
+            generation = .added(message: "Added “\(title)” (\(hands)) from your recording, found with the \(result.method.rawValue).", lesson: result.lessons[0])
+        } catch is CancellationError {
+            generation = .idle
+        } catch {
+            generation = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+        transcribing = nil
+    }
+
     func importMIDIFile(at url: URL) {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -622,6 +649,9 @@ extension AppModel {
         }
         if let query = defaults.string(forKey: "debugQuery") {
             Task { @MainActor in await generateLesson(from: query) }
+        }
+        if let path = defaults.string(forKey: "debugTranscribe") {
+            Task { @MainActor in await transcribeRecording(at: URL(fileURLWithPath: path)) }
         }
         if let web = defaults.string(forKey: "debugWebSearch") {
             Task { @MainActor in
