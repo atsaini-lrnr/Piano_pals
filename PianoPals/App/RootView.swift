@@ -22,6 +22,14 @@ struct RootView: View {
         .sheet(isPresented: $app.showCameraPicker) { CameraPickerSheet(hub: app.cameras) }
         .task { await app.bootstrap() }
         .onChange(of: scenePhase) { _, phase in app.cameras.setActive(phase == .active) }
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+            #if targetEnvironment(macCatalyst)
+            // On a Mac the window is resizable; keep it big enough for the lesson layout.
+            for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+                scene.sizeRestrictions?.minimumSize = CGSize(width: 1100, height: 760)
+            }
+            #endif
+        }
     }
 }

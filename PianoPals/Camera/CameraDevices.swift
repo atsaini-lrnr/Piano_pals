@@ -10,6 +10,8 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
         case continuity
         case external
         case companion
+        /// Mac only: the MacBook's "Desk View" camera, an overhead view of the desk in front of the Mac.
+        case deskView
         case other
     }
 
@@ -19,7 +21,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
 
     /// Built-in cameras can't run two at once (outside multi-cam sessions), so only one channel may use one.
     var isBuiltIn: Bool { kind == .front || kind == .back || kind == .ultraWide }
-    var isRemote: Bool { kind == .continuity || kind == .external || kind == .companion }
+    var isRemote: Bool { kind == .continuity || kind == .external || kind == .companion || kind == .deskView }
 
     var symbolName: String {
         switch kind {
@@ -29,6 +31,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
         case .continuity: return "iphone.gen3"
         case .external: return "web.camera"
         case .companion: return "iphone.gen3"
+        case .deskView: return "macbook"
         case .other: return "video"
         }
     }
@@ -41,6 +44,7 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
         case .continuity: return "iPhone (Continuity Camera)"
         case .external: return "External camera"
         case .companion: return "iPhone in camera mode"
+        case .deskView: return "Mac Desk View camera"
         case .other: return "Camera"
         }
     }
@@ -51,19 +55,35 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
         self.kind = kind
     }
 
+    static func isDeskView(_ device: AVCaptureDevice) -> Bool {
+        #if targetEnvironment(macCatalyst)
+        return device.deviceType.rawValue == "AVCaptureDeviceTypeDeskViewCamera"
+        #else
+        return false
+        #endif
+    }
+
     init(device: AVCaptureDevice) {
         let kind: Kind
         if device.isContinuityCamera || device.deviceType == .continuityCamera {
             kind = .continuity
         } else if device.deviceType == .external {
             kind = .external
+        } else if CameraDeviceInfo.isDeskView(device) {
+            kind = .deskView
         } else if device.deviceType == .builtInUltraWideCamera {
             kind = .ultraWide
         } else {
             switch device.position {
             case .front: kind = .front
             case .back: kind = .back
-            default: kind = .other
+            default:
+                // A Mac's built-in camera reports no position; it faces the user like a front camera.
+                #if targetEnvironment(macCatalyst)
+                kind = device.deviceType == .builtInWideAngleCamera ? .front : .other
+                #else
+                kind = .other
+                #endif
             }
         }
         self.init(id: device.uniqueID, name: device.localizedName, kind: kind)

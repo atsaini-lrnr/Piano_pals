@@ -126,29 +126,44 @@ final class FramedConnection: @unchecked Sendable {
     }
 }
 
-/// Minimal Keychain wrapper for pairing codes.
+/// Keychain wrapper for pairing codes. Uses the iOS-style data-protection keychain on every platform (on a Mac the default would
+/// be the legacy login keychain, which prompts). If the keychain refuses (e.g. an unsigned test build without keychain
+/// entitlements), falls back to a local-only preference so pairing still works.
 enum PairingKeychain {
     private static let service = "PianoPals.companion"
+    private static func fallbackKey(_ account: String) -> String { "pairing.fallback.\(account)" }
+
+    private static func base(_ account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account,
+         kSecUseDataProtectionKeychain as String: true]
+    }
 
     static func save(_ secret: String, account: String) {
-        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
-        SecItemDelete(base as CFDictionary)
-        var item = base
+        SecItemDelete(base(account) as CFDictionary)
+        var item = base(account)
         item[kSecValueData as String] = Data(secret.utf8)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(item as CFDictionary, nil)
+        if SecItemAdd(item as CFDictionary, nil) == errSecSuccess {
+            UserDefaults.standard.removeObject(forKey: fallbackKey(account))
+        } else {
+            UserDefaults.standard.set(secret, forKey: fallbackKey(account))
+        }
     }
 
     static func load(account: String) -> String? {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                                    kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        var query = base(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data,
+           let value = String(data: data, encoding: .utf8) {
+            return value
+        }
+        return UserDefaults.standard.string(forKey: fallbackKey(account))
     }
 
     static func delete(account: String) {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
-        SecItemDelete(query as CFDictionary)
+        SecItemDelete(base(account) as CFDictionary)
+        UserDefaults.standard.removeObject(forKey: fallbackKey(account))
     }
 }

@@ -29,7 +29,7 @@ final class RawCameraProbe: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         }
         DispatchQueue.global().async { [session, log] in
             session.startRunning()
-            log.info("probe: started \(device.localizedName, privacy: .public), multitasking camera access supported=\(session.isMultitaskingCameraAccessSupported) enabled=\(session.isMultitaskingCameraAccessEnabled)")
+            log.info("probe: started \(device.localizedName, privacy: .public))")
         }
         let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         log.info("probe: app state \(UIApplication.shared.applicationState.rawValue) (0 = active); device suspended=\(device.isSuspended) connected=\(device.isConnected) center-stage=\(AVCaptureDevice.isCenterStageEnabled) thermal=\(ProcessInfo.processInfo.thermalState.rawValue) lowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled) auth=\(AVCaptureDevice.authorizationStatus(for: .video).rawValue) window=\(String(describing: window?.coordinateSpace.bounds)) screen=\(String(describing: window?.screen.bounds)) fullscreen=\(window?.isFullScreen ?? false) sceneActivation=\(window?.activationState.rawValue ?? -1)")

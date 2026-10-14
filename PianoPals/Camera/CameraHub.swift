@@ -46,9 +46,15 @@ final class CameraHub: ObservableObject {
     /// Explicit "no camera for this channel" choices, so auto-assignment doesn't undo them.
     private var userClearedChannels: Set<CameraChannelID> = []
 
-    static let deviceTypes: [AVCaptureDevice.DeviceType] = [
-        .builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTrueDepthCamera, .continuityCamera, .external
-    ]
+    static let deviceTypes: [AVCaptureDevice.DeviceType] = {
+        var types: [AVCaptureDevice.DeviceType] = [
+            .builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTrueDepthCamera, .continuityCamera, .external
+        ]
+        #if targetEnvironment(macCatalyst)
+        types.append(AVCaptureDevice.DeviceType(rawValue: "AVCaptureDeviceTypeDeskViewCamera"))
+        #endif
+        return types
+    }()
 
     init() {
         let defaults = UserDefaults.standard

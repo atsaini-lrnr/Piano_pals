@@ -109,7 +109,7 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         deviceInfo = info
         state = .starting
         currentDevice = device
-        let mirroredByDefault = device.position == .front
+        let mirroredByDefault = CameraDeviceInfo(device: device).kind == .front
         config.withLock { $0.mirrored = mirroredByDefault != flipHorizontally }
         setupRotationCoordinator(for: device)
 
@@ -269,7 +269,7 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             DispatchQueue.main.async { self.applyOrientation() }
             return
         }
-        let mirrored = (currentDevice?.position == .front) != flipHorizontally
+        let mirrored = (currentDevice.map { CameraDeviceInfo(device: $0).kind == .front } ?? false) != flipHorizontally
         config.withLock { $0.mirrored = mirrored }
 
         let previewBase = Double(rotationCoordinator?.videoRotationAngleForHorizonLevelPreview ?? 0)
