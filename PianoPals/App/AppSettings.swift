@@ -76,7 +76,8 @@ final class AppSettings: ObservableObject {
         tempoScale = tempo == 0 ? 0.8 : tempo
         narrationEnabled = defaults.object(forKey: "narration") as? Bool ?? true
         onScreenSound = defaults.object(forKey: "onScreenSound") as? Bool ?? true
-        hardwareSound = defaults.object(forKey: "hardwareSound") as? Bool ?? false
+        // On by default: a MIDI controller (like the Impact LX61+) has no speakers, so without this the real keys are silent.
+        hardwareSound = defaults.object(forKey: "hardwareSound") as? Bool ?? true
         mirrorSmile = defaults.object(forKey: "mirrorSmile") as? Bool ?? true
         demoHands = defaults.bool(forKey: "demoHands")
         demoWrongFinger = defaults.bool(forKey: "demoWrongFinger")

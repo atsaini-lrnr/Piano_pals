@@ -8,11 +8,6 @@ import Foundation
 final class CameraHub: ObservableObject {
     @Published private(set) var availableDevices: [CameraDeviceInfo] = []
     @Published private(set) var authorization: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
-    @Published var layout: CameraLayout {
-        didSet { UserDefaults.standard.set(layout.rawValue, forKey: Keys.layout) }
-    }
-    /// In picture-in-picture layout, which channel is shown large.
-    @Published var pipLargeChannel: CameraChannelID = .primary
     @Published var trackingPreference: TrackingPreference {
         didSet { UserDefaults.standard.set(trackingPreference.rawValue, forKey: Keys.tracking) }
     }
@@ -29,7 +24,6 @@ final class CameraHub: ObservableObject {
     private enum Keys {
         static let primaryID = "camera.primaryID"
         static let overheadID = "camera.overheadID"
-        static let layout = "camera.layout"
         static let tracking = "camera.tracking"
         static let fps = "camera.fps"
         static let primaryRotation = "camera.primaryRotation"
@@ -58,7 +52,6 @@ final class CameraHub: ObservableObject {
 
     init() {
         let defaults = UserDefaults.standard
-        layout = CameraLayout(rawValue: defaults.string(forKey: Keys.layout) ?? "") ?? .grid
         trackingPreference = TrackingPreference(rawValue: defaults.string(forKey: Keys.tracking) ?? "") ?? .automatic
         let storedFPS = defaults.double(forKey: Keys.fps)
         preferredFPS = storedFPS == 0 ? 60 : storedFPS

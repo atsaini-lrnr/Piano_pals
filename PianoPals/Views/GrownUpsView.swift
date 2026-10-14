@@ -143,9 +143,6 @@ private struct GrownUpsContent: View {
             Toggle("Line up the camera with the keys", isOn: $settings.alignedCamera)
             Toggle("Show the camera picture (off = just keys and fingers)", isOn: $settings.showFootage)
             Toggle("Also show the iPad's front camera", isOn: $settings.showSideView)
-            Picker("Layout", selection: $cameras.layout) {
-                ForEach(CameraLayout.allCases) { Text($0.displayName).tag($0) }
-            }
             Picker("Hands are tracked on", selection: $cameras.trackingPreference) {
                 ForEach(TrackingPreference.allCases) { Text($0.displayName).tag($0) }
             }
@@ -178,7 +175,7 @@ private struct GrownUpsContent: View {
             Toggle("Play sound for on-screen keys", isOn: $settings.onScreenSound)
             Toggle("Play sound for the real keyboard", isOn: $settings.hardwareSound)
         } header: { Text("Piano") } footer: {
-            Text("Leave “real keyboard” sound off if your keyboard has its own speakers. Changing the keyboard size means the hands need calibrating again.")
+            Text("Turn “real keyboard” sound off only if your keyboard has its own speakers (a digital piano). A MIDI keyboard such as the Impact LX61+ makes no sound by itself, so the iPad plays the notes. Changing the keyboard size means the hands need calibrating again.")
         }
     }
 

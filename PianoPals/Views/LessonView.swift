@@ -60,7 +60,7 @@ private struct LessonContent: View {
                 if let crop {
                     alignedStrip(channel: channel, crop: crop, region: region, channelID: channelID)
                 } else {
-                    unalignedBand(width: geo.size.width, showHint: settings.alignedCamera && live && !region.isCalibrated)
+                    unalignedBand(size: CGSize(width: geo.size.width, height: height), showHint: settings.alignedCamera && live && !region.isCalibrated)
                 }
             }
             .frame(width: geo.size.width, height: height)
@@ -106,23 +106,29 @@ private struct LessonContent: View {
         }
     }
 
-    /// The whole camera pictures (not lined up), used before the keyboard is calibrated or with no overhead view.
-    private func unalignedBand(width: CGFloat, showHint: Bool) -> some View {
-        ZStack(alignment: .top) {
-            HStack(spacing: 12) {
-                ZStack(alignment: .topLeading) {
-                    VStack {
-                        AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt).frame(width: 190, height: 200)
-                        Spacer(minLength: 0)
-                    }
-                    coachBubble
-                }
-                .frame(width: 190)
-                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
-
-                CameraBand(hub: cameras, highlight: session.targets.first?.note.finger, demoHands: settings.demoHands,
-                           coaching: { model.coachingContext(for: $0) }) { app.showCameraPicker = true }
+    /// One wide camera view, edge to edge, iPhone first (the tracking channel): pinch to zoom, drag to move, double-tap to reset.
+    /// Used until the keyboard is calibrated, or with no overhead view.
+    private func unalignedBand(size: CGSize, showHint: Bool) -> some View {
+        let id = cameras.trackingChannel
+        let channel = cameras.channel(id)
+        let aspect = CameraTile.aspect(of: channel)
+        return ZStack(alignment: .top) {
+            PanZoomView(contentSize: CGSize(width: size.width, height: size.width / aspect), container: size) {
+                CameraTile(channel: channel, title: id == .primary ? "Side view" : "Top view", highlight: session.targets.first?.note.finger,
+                           isTracking: true, demoBackdrop: settings.demoHands && id == .primary && channel.state != .running,
+                           coaching: model.coachingContext(for: id),
+                           placeholderButton: id == .overhead && channel.state != .running && cameras.authorization == .authorized
+                               ? ("Use my iPhone", { app.showCameraPicker = true }) : nil, chrome: false)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            HStack(alignment: .top, spacing: 8) {
+                AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt).frame(width: 120, height: 130)
+                coachBubble
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.coachMessage)
             if showHint {
                 Button {
                     app.leaveLesson()

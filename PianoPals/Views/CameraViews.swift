@@ -1,6 +1,23 @@
 import SwiftUI
 
 /// One camera's live picture with the hand overlay on top (or a friendly placeholder when there's no camera).
+/// The rounded, bordered, fixed-aspect frame around a camera tile (skipped in the wide pan-and-zoom view).
+private struct TileFrame: ViewModifier {
+    let enabled: Bool
+    let aspect: CGFloat
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.aspectRatio(aspect, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white, lineWidth: 4))
+                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+        } else {
+            content
+        }
+    }
+}
+
 struct CameraTile: View {
     @ObservedObject var channel: CameraChannel
     let title: String
@@ -9,6 +26,13 @@ struct CameraTile: View {
     var demoBackdrop = false
     var coaching: CoachingContext?
     var placeholderButton: (title: String, action: () -> Void)?
+    /// False inside the wide pan-and-zoom view: no title badge, rounded border or fixed aspect (the container sizes it).
+    var chrome = true
+
+    /// Width ÷ height of what the channel shows (16:9 until it is running).
+    static func aspect(of channel: CameraChannel) -> CGFloat {
+        channel.state == .running ? max(channel.videoSize.width / max(channel.videoSize.height, 1), 0.5) : 16.0 / 9.0
+    }
 
     var body: some View {
         ZStack {
@@ -28,7 +52,7 @@ struct CameraTile: View {
                 CoachingOverlayView(frame: channel.latestFrame, context: coaching, imageSize: channel.latestFrame?.imageSize ?? channel.videoSize)
             }
 
-            VStack {
+            if chrome { VStack {
                 HStack {
                     Label(title, systemImage: channel.deviceInfo?.symbolName ?? "video")
                         .font(.kid(18, weight: .bold))
@@ -45,17 +69,14 @@ struct CameraTile: View {
                 }
                 Spacer()
             }
-            .padding(10)
+            .padding(10) }
 
             if channel.state == .interrupted {
                 Text("Camera paused…").font(.kid(24)).foregroundStyle(.white)
                     .padding(16).background(RoundedRectangle(cornerRadius: 16).fill(.black.opacity(0.6)))
             }
         }
-        .aspectRatio(channel.state == .running ? max(channel.videoSize.width / max(channel.videoSize.height, 1), 0.5) : 16.0 / 9.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white, lineWidth: 4))
-        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+        .modifier(TileFrame(enabled: chrome, aspect: CameraTile.aspect(of: channel)))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }
@@ -133,50 +154,6 @@ private struct RemotePreviewImage: View {
 }
 
 /// The camera section across the top of the lesson: both views side by side, as large as the height allows.
-struct CameraBand: View {
-    @ObservedObject var hub: CameraHub
-    var highlight: Finger?
-    var demoHands: Bool
-    var coaching: (CameraChannelID) -> CoachingContext?
-    var onChoose: () -> Void
-
-    var body: some View {
-        switch hub.layout {
-        case .grid:
-            let overheadLive = hub.overhead.state == .running
-            GeometryReader { geo in
-                HStack(spacing: 12) {
-                    Spacer(minLength: 0)
-                    tile(.primary)
-                    tile(.overhead).frame(width: overheadLive ? nil : geo.size.width * 0.26)
-                    Spacer(minLength: 0)
-                }
-            }
-        case .pip:
-            let large = hub.pipLargeChannel
-            let small: CameraChannelID = large == .primary ? .overhead : .primary
-            ZStack(alignment: .bottomTrailing) {
-                tile(large)
-                tile(small).frame(width: 220).padding(10)
-                    .onTapGesture { withAnimation(.spring) { hub.pipLargeChannel = small } }
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityHint("Swap the big and small camera")
-            }
-        }
-    }
-
-    private func tile(_ id: CameraChannelID) -> some View {
-        CameraTile(channel: hub.channel(id),
-                   title: id == .primary ? "Side view" : "Top view",
-                   highlight: highlight,
-                   isTracking: hub.trackingChannel == id,
-                   demoBackdrop: demoHands && id == .primary && hub.channel(id).state != .running,
-                   coaching: coaching(id),
-                   placeholderButton: id == .overhead && hub.channel(id).state != .running && hub.authorization == .authorized
-                       ? ("Use my iPhone", onChoose) : nil)
-    }
-}
-
 /// Custom camera chooser. iPadOS has no system Continuity Camera picker view (that class is tvOS-only), so a nearby iPhone
 /// shows up here automatically once it's available, and the grown-up taps to give it a job.
 struct CameraPickerSheet: View {

@@ -90,14 +90,6 @@ struct CameraDeviceInfo: Identifiable, Equatable, Hashable, Sendable {
     }
 }
 
-enum CameraLayout: String, CaseIterable, Identifiable {
-    case grid
-    case pip
-
-    var id: String { rawValue }
-    var displayName: String { self == .grid ? "Side by side" : "Picture in picture" }
-}
-
 enum TrackingPreference: String, CaseIterable, Identifiable {
     case automatic
     case primary
