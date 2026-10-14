@@ -35,6 +35,16 @@ final class AppModel: ObservableObject {
         case failed(String)
     }
     @Published private(set) var webSearch: WebSearchState = .idle
+    /// The grown-up's browser-like song search: what is being looked up, step by step, and the song they picked.
+    struct SongSearchState: Equatable {
+        var query = ""
+        var running = false
+        var results: SongSearchResults?
+        var chosen: CatalogSong?
+        var options: SongOptions?
+    }
+    @Published private(set) var songSearch = SongSearchState()
+    var songSearcher = SongSearcher()
     /// 0…1 while a recording is being turned into notes; nil otherwise.
     @Published private(set) var transcribing: Double?
     var onlineSearch: OnlineMelodySearching = OnlineMelodySearch()
@@ -325,6 +335,26 @@ final class AppModel: ObservableObject {
 
     func clearWebSearch() { webSearch = .idle }
 
+    /// Looks in your songs, the free library, the song catalogues and the open-file sites; each step reports as it finishes.
+    func searchSongs(_ query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !songSearch.running else { return }
+        songSearch = SongSearchState(query: trimmed, running: true, results: SongSearchResults(steps: Dictionary(uniqueKeysWithValues: SearchStep.allCases.map { ($0, StepState.waiting) })))
+        let results = await songSearcher.search(trimmed, songs: songs) { step, state in
+            Task { @MainActor in self.songSearch.results?.steps[step] = state }
+        }
+        songSearch.results = results
+        songSearch.running = false
+    }
+
+    /// Picking a catalogue entry works out which real options exist for it.
+    func chooseCatalogSong(_ song: CatalogSong?) {
+        songSearch.chosen = song
+        songSearch.options = song.flatMap { chosen in songSearch.results.map { SongOptions.make(for: chosen, library: songSearcher.library, files: $0.files) } }
+    }
+
+    func clearSongSearch() { songSearch = SongSearchState() }
+
     /// Adds a library suggestion the grown-up picked from the not-found card.
     func addSuggestion(_ song: LibrarySong) {
         let lesson = song.lesson(hand: settings.lessonHand)
@@ -354,9 +384,9 @@ final class AppModel: ObservableObject {
         generation = .idle
         let title = url.deletingPathExtension().lastPathComponent
         do {
-            let result = try await Task.detached(priority: .userInitiated) { [weak self] in
+            let result = try await Task.detached(priority: .userInitiated) {
                 try RecordingTranscriber().transcribe(url: url, title: title) { fraction in
-                    Task { @MainActor in self?.transcribing = fraction }
+                    Task { @MainActor in self.transcribing = fraction }
                 }
             }.value
             for lesson in result.lessons.reversed() { add(lesson) }
@@ -652,6 +682,9 @@ extension AppModel {
         }
         if let path = defaults.string(forKey: "debugTranscribe") {
             Task { @MainActor in await transcribeRecording(at: URL(fileURLWithPath: path)) }
+        }
+        if let find = defaults.string(forKey: "debugSongSearch") {
+            Task { @MainActor in await searchSongs(find) }
         }
         if let web = defaults.string(forKey: "debugWebSearch") {
             Task { @MainActor in

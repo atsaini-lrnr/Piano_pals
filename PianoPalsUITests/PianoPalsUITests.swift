@@ -131,6 +131,21 @@ final class PianoPalsAIFlowUITests: XCTestCase {
         XCTAssertFalse(element(containing: "Free to use", in: app).exists, "nothing is searched until the grown-up taps")
     }
 
+    func testFindASongSheetShowsStepsPrivacyLineAndTheFreeLibraryHit() {
+        let app = launch(["-debugGrownUps", "YES"])
+        XCTAssertTrue(app.buttons["findSongButton"].waitForExistence(timeout: 10))
+        app.buttons["findSongButton"].tap()
+        let field = app.textFields["songSearchField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(element(containing: "Searching sends only the words you type", in: app).exists, "says who gets the words")
+        field.tap()
+        field.typeText("ode to joy\n")   // the keyboard's Search key
+        for label in ["Your songs", "Free song library", "Song catalogue", "Free open files"] {
+            XCTAssertTrue(element(containing: label, in: app).waitForExistence(timeout: 10), label)
+        }
+        XCTAssertTrue(element(containing: "In the free song library", in: app).waitForExistence(timeout: 15), "the bundled library answers without the internet")
+    }
+
     func testKnownSongIsFoundOffline() {
         let app = launch(["-debugGrownUps", "YES", "-debugQuery", "twinkel twinkle little star lyrics"])
         XCTAssertTrue(element(containing: "found in the free song library", in: app).waitForExistence(timeout: 15))

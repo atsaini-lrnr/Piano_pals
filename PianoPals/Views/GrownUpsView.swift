@@ -21,6 +21,7 @@ private struct GrownUpsContent: View {
     @State private var songText = ""
     @State private var importing = false
     @State private var importingAudio = false
+    @State private var findingSong = false
     @State private var listening = false
     @FocusState private var fieldFocused: Bool
 
@@ -40,6 +41,10 @@ private struct GrownUpsContent: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $listening) { ListenView(app: app) }
+            .sheet(isPresented: $findingSong) { SongSearchView(app: app) }
+            #if DEBUG
+            .onAppear { if UserDefaults.standard.bool(forKey: "debugFindSong") { findingSong = true } }
+            #endif
             .fileImporter(isPresented: $importingAudio, allowedContentTypes: [.audio]) { result in
                 if case .success(let url) = result { Task { await app.transcribeRecording(at: url) } }
             }
@@ -75,6 +80,9 @@ private struct GrownUpsContent: View {
                 Button("Listen to a song…") { listening = true }.buttonStyle(.bordered)
                 Button("Import MIDI…") { importing = true }.buttonStyle(.bordered)
             }
+            Button { findingSong = true } label: { Label("Find a song online…", systemImage: "magnifyingglass") }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("findSongButton")
             HStack {
                 Button { importingAudio = true } label: { Label("Make a lesson from a recording…", systemImage: "waveform") }
                     .buttonStyle(.bordered)
