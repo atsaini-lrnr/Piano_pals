@@ -77,7 +77,6 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var lastRemotePublish: TimeInterval = 0
     private var statsWindowStart: TimeInterval = 0
     private var statsFrames = 0
-    private var statsHandFrames = 0
     private var dumpedFrame = false
     private var targetFPS = 60.0
     /// Only touched on `outputQueue`.

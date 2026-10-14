@@ -17,7 +17,6 @@ final class ListenRecorder: ObservableObject {
     @Published private(set) var liveNote: Int?
     /// 0…1 loudness for the level meter.
     @Published private(set) var level: Double = 0
-    @Published private(set) var heardCount = 0
 
     private let engine = AVAudioEngine()
     private let dsp = DispatchQueue(label: "pianopals.listen.dsp", qos: .userInitiated)
@@ -72,7 +71,6 @@ final class ListenRecorder: ObservableObject {
         self.pipeline.withLock { $0 = pipeline }
         liveNote = nil
         level = 0
-        heardCount = 0
 
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1_024, format: format) { [weak self] buffer, _ in
@@ -135,8 +133,6 @@ final class ListenRecorder: ObservableObject {
         }
     }
 
-    /// Records how many notes have been recognised so far (cheap; for the "heard N notes" label).
-    func noteHeardCount(_ count: Int) { heardCount = count }
 
     private static func requestPermission() async -> Bool {
         switch AVAudioApplication.shared.recordPermission {

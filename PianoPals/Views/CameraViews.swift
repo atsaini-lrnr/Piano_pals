@@ -132,46 +132,6 @@ private struct RemotePreviewImage: View {
     }
 }
 
-/// Shows both camera angles either side by side (stacked in the side column) or as picture-in-picture.
-struct CameraPanel: View {
-    @ObservedObject var hub: CameraHub
-    var highlight: Finger?
-    var demoHands: Bool
-    var onChoose: () -> Void
-
-    var body: some View {
-        switch hub.layout {
-        case .grid:
-            VStack(spacing: 14) {
-                tile(.primary)
-                tile(.overhead)
-            }
-        case .pip:
-            let large = hub.pipLargeChannel
-            let small: CameraChannelID = large == .primary ? .overhead : .primary
-            ZStack(alignment: .bottomTrailing) {
-                tile(large)
-                tile(small)
-                    .frame(width: 190)
-                    .padding(10)
-                    .onTapGesture { withAnimation(.spring) { hub.pipLargeChannel = small } }
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityHint("Swap the big and small camera")
-            }
-        }
-    }
-
-    private func tile(_ id: CameraChannelID) -> some View {
-        CameraTile(channel: hub.channel(id),
-                   title: id == .primary ? "Side view" : "Top view",
-                   highlight: highlight,
-                   isTracking: hub.trackingChannel == id,
-                   demoBackdrop: demoHands && id == .primary && hub.channel(id).state != .running,
-                   placeholderButton: id == .overhead && hub.channel(id).state != .running && hub.authorization == .authorized
-                       ? ("Use my iPhone", onChoose) : nil)
-    }
-}
-
 /// The camera section across the top of the lesson: both views side by side, as large as the height allows.
 struct CameraBand: View {
     @ObservedObject var hub: CameraHub

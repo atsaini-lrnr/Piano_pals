@@ -99,16 +99,6 @@ final class CompanionHost: NSObject, ObservableObject, @unchecked Sendable {
         state = .stopped
     }
 
-    /// A new code makes any previously paired iPad ask for the new one.
-    func resetPairingCode() {
-        let code = CompanionSecurity.makeCode()
-        PairingKeychain.save(code, account: Self.codeAccount)
-        pairingCode = code
-        if state != .stopped {
-            stop()
-            start()
-        }
-    }
 
     // MARK: Connection
 

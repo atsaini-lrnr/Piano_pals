@@ -5,7 +5,6 @@ import Foundation
 /// hand landmarks (plus an optional small preview picture) over a private peer-to-peer link — no internet, no cloud.
 enum CompanionConstants {
     /// Bonjour service name (≤ 15 characters, lowercase letters, digits and hyphens).
-    static let serviceType = "pianopals-cam"
     static let protocolVersion = 1
 }
 

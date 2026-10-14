@@ -96,7 +96,6 @@ struct RawNote: Equatable, Sendable {
 
 struct Lesson: Identifiable, Equatable, Sendable {
     enum Source: String, Sendable {
-        case cloud
         case localFallback
         case library
         case imported

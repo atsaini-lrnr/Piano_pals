@@ -113,9 +113,6 @@ final class LessonSession: ObservableObject {
 
     // MARK: Queries
 
-    var hitCount: Int {
-        noteProgress.filter { if case .hit = $0 { return true } else { return false } }.count
-    }
     var progressFraction: Double {
         guard !noteProgress.isEmpty else { return 0 }
         return Double(noteProgress.filter { $0 != .pending }.count) / Double(noteProgress.count)

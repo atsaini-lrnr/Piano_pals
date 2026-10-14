@@ -48,11 +48,5 @@ enum SongLibrary {
     }
 
     /// Best match for a free-text query (title and/or composer), or nil when nothing is a convincing match.
-    static func match(title: String, composer: String? = nil, in songs: [LibrarySong] = all) -> LibrarySong? {
-        SongMatcher.bestMatch(query: [title, composer ?? ""].joined(separator: " "), in: songs)?.song
-    }
-
-    static func normalize(_ text: String) -> String { SongMatcher.normalize(text) }
-
     private final class BundleToken {}
 }

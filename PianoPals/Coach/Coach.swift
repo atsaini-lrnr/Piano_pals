@@ -24,17 +24,6 @@ enum CoachPhrases {
     static let finish = ["You did it! Great playing!", "Wow! Three stars!", "Hooray! You finished the song!"]
     static let practiceNext = ["Next time, let's practice your %@ finger!"]
 
-    /// Every phrase with sample values filled in (used by the safety test).
-    static var allExpanded: [String] {
-        var all: [String] = []
-        for template in nearMiss { all += ["left", "right"].map { String(format: template, $0) } }
-        for template in fingerTip { for finger in Finger.allCases { all.append(formatFinger(template, finger)) } }
-        for template in handTip { all += ["left", "right"].map { String(format: template, $0) } }
-        for template in practiceNext { all += Finger.allCases.map { String(format: template, $0.kidName) } }
-        all += lookForGlow + hesitation + slower + waitForMe + streak + finish
-        return all
-    }
-
     static func formatFinger(_ template: String, _ finger: Finger) -> String {
         // Templates use either "%@ … %d" or "%d … %@".
         if template.hasPrefix("Try") { return String(format: template, finger.kidName, finger.number) }

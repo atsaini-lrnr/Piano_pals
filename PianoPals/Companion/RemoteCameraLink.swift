@@ -172,9 +172,6 @@ final class RemoteCameraLink: NSObject, ObservableObject, @unchecked Sendable {
         state = browser == nil ? .idle : .searching
     }
 
-    func forgetPhone(_ phone: NearbyPhone) {
-        PairingKeychain.delete(account: "ipad-\(phone.name)")
-    }
 
     private func connectionEnded(wasConnecting: Bool, phone: NearbyPhone) {
         let wasConnected: Bool = { if case .connected = state { return true } else { return false } }()

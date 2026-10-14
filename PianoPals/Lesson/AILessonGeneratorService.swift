@@ -8,14 +8,6 @@ enum LessonInputKind: Equatable, Sendable {
     case titleSearch(title: String, composer: String?)
     case rawNotes([RawNote])
 
-    var wireName: String {
-        switch self {
-        case .youTube: return "youtube"
-        case .musicShare: return "music_share"
-        case .titleSearch: return "title_search"
-        case .rawNotes: return "raw_notes"
-        }
-    }
 }
 
 /// Turns whatever a grown-up typed or pasted into a structured request.
@@ -96,25 +88,6 @@ enum LessonInputClassifier {
     }
 }
 
-// MARK: - Wire types
-
-struct LessonCloudRequest: Codable, Equatable, Sendable {
-    var kind: String
-    var query: String
-    var videoID: String?
-    var title: String?
-    var artist: String?
-    var hand: String
-    var maxNotes: Int
-}
-
-struct LessonCloudResponse: Codable, Equatable, Sendable {
-    var title: String
-    var composer: String?
-    var tempoBPM: Double?
-    var notes: [Note]
-}
-
 enum LessonServiceError: Error, Equatable, LocalizedError {
     case emptyInput
     case notFound
@@ -130,53 +103,6 @@ enum LessonServiceError: Error, Equatable, LocalizedError {
         case .badStatus(let code): return "The lesson service answered with status \(code)."
         case .invalidResponse(let reason): return "The lesson service sent something unexpected (\(reason))."
         }
-    }
-}
-
-// MARK: - Transport
-
-/// The seam between the app and the cloud pipeline. Production code uses `URLSessionLessonTransport`;
-/// tests and the simulator use `MockLessonTransport`.
-protocol LessonTransport: Sendable {
-    func perform(_ request: LessonCloudRequest) async throws -> Data
-}
-
-/// Pretends to be the cloud endpoint: waits a little, then answers with JSON for songs it knows.
-struct MockLessonTransport: LessonTransport {
-    var latency: Duration = .milliseconds(1200)
-    var library: [LibrarySong] = SongLibrary.all
-
-    func perform(_ request: LessonCloudRequest) async throws -> Data {
-        try await Task.sleep(for: latency)
-        guard request.kind == "title_search" || request.kind == "music_share",
-              let song = SongLibrary.match(title: request.title ?? request.query, composer: request.artist, in: library) else {
-            throw LessonServiceError.notFound
-        }
-        let lesson = song.lesson(hand: HandSide(rawValue: request.hand) ?? .right, source: .cloud)
-        let response = LessonCloudResponse(title: lesson.title, composer: lesson.composer, tempoBPM: lesson.tempoBPM, notes: lesson.notes)
-        return try JSONEncoder().encode(response)
-    }
-}
-
-/// Real HTTPS transport: POSTs the request as JSON and returns the response body.
-struct URLSessionLessonTransport: LessonTransport {
-    var endpoint: URL
-    var session: URLSession = .shared
-    var apiKey: String?
-
-    func perform(_ request: LessonCloudRequest) async throws -> Data {
-        var urlRequest = URLRequest(url: endpoint, timeoutInterval: 20)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let apiKey { urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
-        urlRequest.httpBody = try JSONEncoder().encode(request)
-        let (data, response) = try await session.data(for: urlRequest)
-        guard let http = response as? HTTPURLResponse else { throw LessonServiceError.invalidResponse("no HTTP response") }
-        guard (200..<300).contains(http.statusCode) else {
-            throw http.statusCode == 404 ? LessonServiceError.notFound : LessonServiceError.badStatus(http.statusCode)
-        }
-        return data
     }
 }
 
@@ -220,16 +146,6 @@ struct LocalLessonEngine: Sendable {
         return lesson(title: "Practice tune: \(shortLabel)", composer: "Made on this iPad", rawNotes: raw, hand: hand, tempoBPM: bpm,
                       description: "A practice tune made on this iPad (the song itself wasn't found)", emoji: "🎶")
     }
-
-    /// Ascending then descending five-finger scale from `startPitch`.
-    func fiveFingerScale(startPitch: Int = 60, hand: HandSide = .right, bpm: Double = 80) -> Lesson {
-        let steps = [0, 2, 4, 5, 7, 5, 4, 2, 0]
-        let raw = steps.enumerated().map { index, offset in
-            RawNote(pitch: startPitch + offset, start: Double(index) * 60 / bpm, duration: 60 / bpm)
-        }
-        return lesson(title: "Five Finger Scale", rawNotes: raw, hand: hand, tempoBPM: bpm, source: .localFallback,
-                      description: "Generated on this iPad", emoji: "🐛")
-    }
 }
 
 /// SplitMix64: tiny, fast, deterministic.
@@ -262,8 +178,6 @@ struct SeededGenerator: RandomNumberGenerator {
 enum LessonOrigin: Equatable, Sendable {
     /// Found in the bundled public-domain index (offline).
     case library(score: Double)
-    /// Returned by the optional lesson endpoint.
-    case cloud
     /// Built from notation the user typed.
     case notation
 }
@@ -286,19 +200,15 @@ protocol LessonGenerating: Sendable {
     func generateLesson(from text: String, hand: HandSide) async throws -> LessonGenerationOutcome
 }
 
-/// Pipeline: classify → read the title (links) → clean it → search the offline index → (optionally) ask the endpoint →
+/// Pipeline: classify → read the title (links) → clean it → search the offline index →
 /// otherwise say honestly that we couldn't find it, with suggestions.
 struct AILessonGeneratorService: LessonGenerating {
-    /// Optional lesson endpoint (cloud simulation / future server). Not needed for the built-in songs.
-    var transport: LessonTransport?
     var library: [LibrarySong] = SongLibrary.all
     var titleFetcher: VideoTitleFetching = YouTubeOEmbedFetcher()
     var titleCleaner: TitleCleaning?
     /// The on-device model must never hold up the lesson: if it takes longer than this, rules alone decide.
     var cleanerTimeout: Duration = .seconds(3)
     var localEngine = LocalLessonEngine()
-    var timeout: Duration = .seconds(15)
-    var maxNotes = 400
 
     func generateLesson(from text: String, hand: HandSide = .right) async throws -> LessonGenerationOutcome {
         guard let kind = LessonInputClassifier.classify(text) else { throw LessonServiceError.emptyInput }
@@ -354,23 +264,9 @@ struct AILessonGeneratorService: LessonGenerating {
             }
         }
 
-        // 4. Optional endpoint.
-        var reason = "“\(title)” isn't in the free song library yet."
-        if let transport {
-            do {
-                let request = makeRequest(kind: kind, text: trimmed, title: title, artist: artist, hand: hand)
-                let data = try await withTimeout(timeout) { try await transport.perform(request) }
-                return .lesson(try decodeAndValidate(data, request: request, hand: hand), origin: .cloud)
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch let error as LessonServiceError where error == .notFound {
-                // fall through to the honest not-found
-            } catch {
-                reason += " (The lesson service said: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription))"
-            }
-        }
+        let reason = "“\(title)” isn't in the free song library yet."
 
-        // 5. Honest not-found with the closest real songs.
+        // 4. Honest not-found with the closest real songs.
         let suggestions = SongMatcher.rank(query: query, in: library).prefix(3).map(\.song)
         return .notFound(NotFoundInfo(query: trimmed, resolvedTitle: title, reason: reason, suggestions: Array(suggestions)))
     }
@@ -378,31 +274,6 @@ struct AILessonGeneratorService: LessonGenerating {
     /// An explicit, opt-in practice tune (clearly not the real song).
     func practiceTune(for text: String, hand: HandSide) -> Lesson {
         localEngine.practiceTune(seed: text, label: text, hand: hand)
-    }
-
-    func makeRequest(kind: LessonInputKind, text: String, title: String, artist: String?, hand: HandSide) -> LessonCloudRequest {
-        var request = LessonCloudRequest(kind: kind.wireName, query: text, videoID: nil, title: title, artist: artist,
-                                         hand: hand.rawValue, maxNotes: maxNotes)
-        if case .youTube(let id) = kind { request.videoID = id }
-        return request
-    }
-
-    func decodeAndValidate(_ data: Data, request: LessonCloudRequest, hand: HandSide) throws -> Lesson {
-        let response: LessonCloudResponse
-        do {
-            response = try JSONDecoder().decode(LessonCloudResponse.self, from: data)
-        } catch {
-            throw LessonServiceError.invalidResponse("could not read notes")
-        }
-        guard !response.notes.isEmpty else { throw LessonServiceError.invalidResponse("no notes") }
-        guard response.notes.count <= maxNotes else { throw LessonServiceError.invalidResponse("too many notes") }
-        guard response.notes.allSatisfy({ (21...108).contains($0.noteNumber) }) else {
-            throw LessonServiceError.invalidResponse("notes outside the piano range")
-        }
-        let title = response.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Lesson(title: title.isEmpty ? (request.title ?? "New Song") : title,
-                      composer: response.composer, hand: hand, tempoBPM: response.tempoBPM ?? 90,
-                      notes: response.notes, source: .cloud, sourceDescription: "From the lesson service", emoji: "✨")
     }
 }
 

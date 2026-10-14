@@ -122,6 +122,7 @@ enum OnlineSearchError: Error, Equatable, LocalizedError {
     case badStatus(Int)
     case tooLarge
     case notMIDI
+    case licenceNotAllowed
     case nothingPlayable
 
     var errorDescription: String? {
@@ -129,6 +130,7 @@ enum OnlineSearchError: Error, Equatable, LocalizedError {
         case .badStatus(let code): return "The website answered with an error (\(code))."
         case .tooLarge: return "That file is too big to use."
         case .notMIDI: return "That download wasn't a MIDI file."
+        case .licenceNotAllowed: return "That file's licence doesn't allow us to use it."
         case .nothingPlayable: return "There weren't enough notes in that file to make a lesson."
         }
     }
@@ -168,7 +170,7 @@ struct OnlineMelodySearch: OnlineMelodySearching {
     }
 
     func download(_ candidate: OnlineCandidate) async throws -> Data {
-        guard LicensePolicy.isAllowed(candidate.licence) else { throw OnlineSearchError.notMIDI }
+        guard LicensePolicy.isAllowed(candidate.licence) else { throw OnlineSearchError.licenceNotAllowed }
         if let size = candidate.sizeBytes, size > Self.maximumBytes { throw OnlineSearchError.tooLarge }
         let data = try await fetcher.fetch(candidate.midiURL)
         guard data.count <= Self.maximumBytes else { throw OnlineSearchError.tooLarge }

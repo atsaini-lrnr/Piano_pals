@@ -120,7 +120,7 @@ final class AppModel: ObservableObject {
     private var cueTask: Task<Void, Never>?
 
     init(settings: AppSettings = AppSettings(),
-         generator: LessonGenerating = AILessonGeneratorService(transport: MockLessonTransport(latency: .milliseconds(300)), titleCleaner: OnDeviceTitleCleaner())) {
+         generator: LessonGenerating = AILessonGeneratorService(titleCleaner: OnDeviceTitleCleaner())) {
         self.settings = settings
         self.generator = generator
         self.songs = SongLibrary.all.map { $0.lesson(hand: settings.lessonHand) }
@@ -283,7 +283,6 @@ final class AppModel: ObservableObject {
                 let how: String
                 switch origin {
                 case .library: how = "found in the free song library"
-                case .cloud: how = "from the lesson service"
                 case .notation: how = "fingered on this iPad"
                 }
                 generation = .added(message: "Added “\(lesson.title)” (\(how)).", lesson: lesson)
@@ -371,7 +370,6 @@ final class AppModel: ObservableObject {
         return lesson
     }
 
-    func clearGenerationMessage() { generation = .idle }
 
     // MARK: Input pipeline
 

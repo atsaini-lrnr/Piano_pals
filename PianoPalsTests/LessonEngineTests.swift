@@ -270,22 +270,6 @@ final class ClassifierAndServiceTests: XCTestCase {
         func metadata(forVideoID id: String) async throws -> VideoMetadata { try result.get() }
     }
 
-    private struct FixedTransport: LessonTransport {
-        let data: Data
-        func perform(_ request: LessonCloudRequest) async throws -> Data { data }
-    }
-
-    private struct NotFoundTransport: LessonTransport {
-        func perform(_ request: LessonCloudRequest) async throws -> Data { throw LessonServiceError.notFound }
-    }
-
-    private struct HangingTransport: LessonTransport {
-        func perform(_ request: LessonCloudRequest) async throws -> Data {
-            try await Task.sleep(for: .seconds(30))
-            return Data()
-        }
-    }
-
     private struct StubCleaner: TitleCleaning {
         var answer: String?
         var delay: Duration = .zero
@@ -295,10 +279,10 @@ final class ClassifierAndServiceTests: XCTestCase {
         }
     }
 
-    private func service(transport: LessonTransport? = nil, fetcher: VideoTitleFetching = StubFetcher(result: .failure(URLError(.notConnectedToInternet))),
-                         timeout: Duration = .seconds(2), cleaner: TitleCleaning? = nil, cleanerTimeout: Duration = .seconds(3)) -> AILessonGeneratorService {
-        AILessonGeneratorService(transport: transport, library: SongLibrary.all, titleFetcher: fetcher, titleCleaner: cleaner,
-                                 cleanerTimeout: cleanerTimeout, timeout: timeout)
+    private func service(fetcher: VideoTitleFetching = StubFetcher(result: .failure(URLError(.notConnectedToInternet))),
+                         cleaner: TitleCleaning? = nil, cleanerTimeout: Duration = .seconds(3)) -> AILessonGeneratorService {
+        AILessonGeneratorService(library: SongLibrary.all, titleFetcher: fetcher, titleCleaner: cleaner,
+                                 cleanerTimeout: cleanerTimeout)
     }
 
     func testTheOnDeviceModelIsOnlyUsedWhenRulesFail() async throws {
@@ -412,37 +396,6 @@ final class ClassifierAndServiceTests: XCTestCase {
         XCTAssertTrue(a.sourceDescription.contains("wasn't found") || a.sourceDescription.contains("practice tune"))
     }
 
-    func testCloudIsOnlyAskedAfterTheIndexMisses() async throws {
-        let body = #"{"title":"Custom","composer":"Me","tempoBPM":70,"notes":[{"timestamp":0,"duration":1,"noteNumber":60,"assignedFinger":1},{"timestamp":1,"duration":1,"noteNumber":62,"assignedFinger":2}]}"#
-        let svc = service(transport: FixedTransport(data: Data(body.utf8)))
-        // Known song: index wins (the transport would have returned "Custom").
-        guard case .lesson(let known, _) = try await svc.generateLesson(from: "Twinkle Twinkle") else { return XCTFail() }
-        XCTAssertEqual(known.title, "Twinkle Twinkle")
-        // Unknown song: the endpoint is asked.
-        guard case .lesson(let custom, let origin) = try await svc.generateLesson(from: "Some Obscure Tune") else { return XCTFail("endpoint should answer") }
-        XCTAssertEqual(custom.title, "Custom")
-        XCTAssertEqual(origin, .cloud)
-    }
-
-    func testBadCloudResponsesBecomeNotFound() async throws {
-        let responses = [
-            "not json", #"{"title":"x","notes":[]}"#,
-            #"{"title":"x","notes":[{"timestamp":0,"duration":1,"noteNumber":60,"assignedFinger":9}]}"#,
-            #"{"title":"x","notes":[{"timestamp":0,"duration":1,"noteNumber":10,"assignedFinger":2}]}"#
-        ]
-        for body in responses {
-            let outcome = try await service(transport: FixedTransport(data: Data(body.utf8))).generateLesson(from: "Some Obscure Tune")
-            guard case .notFound = outcome else { return XCTFail("bad payload must not become a lesson: \(body)") }
-        }
-        guard case .notFound = try await service(transport: NotFoundTransport()).generateLesson(from: "Some Obscure Tune") else { return XCTFail() }
-    }
-
-    func testCloudTimeoutBecomesNotFound() async throws {
-        let outcome = try await service(transport: HangingTransport(), timeout: .milliseconds(50)).generateLesson(from: "Some Obscure Tune")
-        guard case .notFound(let info) = outcome else { return XCTFail("expected not found") }
-        XCTAssertTrue(info.reason.contains("too long"))
-    }
-
     func testEmptyInputThrows() async {
         do {
             _ = try await service().generateLesson(from: "   ")
@@ -453,7 +406,7 @@ final class ClassifierAndServiceTests: XCTestCase {
     }
 
     func testRawNotesNeverTouchTheNetwork() async throws {
-        let outcome = try await service(transport: NotFoundTransport()).generateLesson(from: "C4 D4 E4 F4 G4")
+        let outcome = try await service().generateLesson(from: "C4 D4 E4 F4 G4")
         guard case .lesson(let lesson, let origin) = outcome else { return XCTFail() }
         XCTAssertEqual(origin, .notation)
         XCTAssertEqual(lesson.notes.map(\.assignedFinger), [1, 2, 3, 4, 5])
@@ -475,10 +428,8 @@ final class ClassifierAndServiceTests: XCTestCase {
         XCTAssertThrowsError(try YouTubeOEmbedFetcher.decode(Data("nope".utf8)))
     }
 
-    func testLocalScaleAndPracticeTune() {
+    func testPracticeTuneStaysInTheLeftHandsFivefingerPosition() {
         let engine = LocalLessonEngine()
-        let scale = engine.fiveFingerScale()
-        XCTAssertEqual(scale.notes.map(\.assignedFinger), [1, 2, 3, 4, 5, 4, 3, 2, 1])
         let tune = engine.practiceTune(seed: "x", label: "x", hand: .left)
         XCTAssertTrue(tune.notes.allSatisfy { (48...55).contains($0.noteNumber) })
     }

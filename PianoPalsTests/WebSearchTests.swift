@@ -167,7 +167,7 @@ final class WebSearchServiceTests: XCTestCase {
         let html = service([candidate.midiURL.absoluteString: Data("<html>login</html>".utf8)])
         do { _ = try await html.download(candidate); XCTFail("not midi") } catch { XCTAssertEqual(error as? OnlineSearchError, .notMIDI) }
         let closed = try XCTUnwrap(MutopiaParser.parse(mutopiaFixture).last)
-        do { _ = try await service([closed.midiURL.absoluteString: scoreFile()]).download(closed); XCTFail("closed") } catch { XCTAssertNotNil(error) }
+        do { _ = try await service([closed.midiURL.absoluteString: scoreFile()]).download(closed); XCTFail("closed") } catch { XCTAssertEqual(error as? OnlineSearchError, .licenceNotAllowed) }
         let declared = OnlineCandidate(site: .commons, title: "x", composer: nil, instrument: nil, licence: "CC0",
                                        midiURL: URL(string: "https://upload.wikimedia.org/a.mid")!, pageURL: nil, sizeBytes: 5_000_000)
         do { _ = try await service().download(declared); XCTFail("declared size") } catch { XCTAssertEqual(error as? OnlineSearchError, .tooLarge) }

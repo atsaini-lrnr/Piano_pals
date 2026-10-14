@@ -76,7 +76,9 @@ final class CompanionProtocolTests: XCTestCase {
     }
 
     func testServiceNameIsValidForBonjour() {
-        let name = CompanionConstants.serviceType
+        let type = CompanionSecurity.bonjourType
+        XCTAssertTrue(type.hasPrefix("_") && type.hasSuffix("._tcp"))
+        let name = String(type.dropFirst().dropLast(5))
         XCTAssertLessThanOrEqual(name.count, 15)
         XCTAssertTrue(name.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "-" })
     }

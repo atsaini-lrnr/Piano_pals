@@ -315,5 +315,4 @@ final class CameraHub: ObservableObject {
         }
     }
 
-    func dismissNotice() { notice = nil }
 }
