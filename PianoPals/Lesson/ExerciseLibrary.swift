@@ -52,6 +52,11 @@ struct Exercise: Identifiable, Equatable, Sendable {
     let bpm: Double
     let notes: [ExerciseNote]
 
+    func fits(in range: ClosedRange<Int>) -> Bool {
+        guard let low = notes.map(\.pitch).min(), let high = notes.map(\.pitch).max() else { return true }
+        return low >= range.lowerBound && high <= range.upperBound
+    }
+
     func lesson() -> Lesson {
         let seconds = 60 / bpm
         var cursor = 0.0
@@ -213,8 +218,9 @@ enum ExerciseLibrary {
         return result
     }()
 
-    static func exercises(in category: ExerciseCategory, hand: HandSide? = nil) -> [Exercise] {
-        all.filter { $0.category == category && (hand == nil || $0.hand == hand) }
+    /// Exercises in a category (optionally one hand) that fit on a keyboard covering `range` (default: 88 keys).
+    static func exercises(in category: ExerciseCategory, hand: HandSide? = nil, range: ClosedRange<Int> = 21...108) -> [Exercise] {
+        all.filter { $0.category == category && (hand == nil || $0.hand == hand) && $0.fits(in: range) }
     }
 
     static func exercise(id: String) -> Exercise? { all.first { $0.id == id } }
@@ -262,15 +268,20 @@ enum PracticePlanner {
     }
 
     /// Six steps, both hands: warm-up (R, L) → scale of the day (R, L) → a drill → a song to finish.
-    static func dailyPlan(progress: [SessionSummary], date: Date = Date(), calendar: Calendar = .current) -> PracticePlan {
+    static func dailyPlan(progress: [SessionSummary], date: Date = Date(), calendar: Calendar = .current,
+                          range: ClosedRange<Int> = 21...108) -> PracticePlan {
         let day = calendar.ordinality(of: .day, in: .year, for: date) ?? 1
         let position = ExerciseLibrary.positions[0]
         func step(_ exercise: Exercise?, _ kind: PracticeStep.Kind) -> PracticeStep? {
             exercise.map { PracticeStep(kind: kind, title: $0.title, emoji: $0.emoji, lesson: $0.lesson()) }
         }
 
-        let majors = ExerciseLibrary.scaleKeys.filter { !$0.isMinor && $0.level <= 2 }
-        let scale = majors[day % majors.count]
+        // Only scales that fit on this keyboard in *both* hands.
+        let majors = ExerciseLibrary.scaleKeys.filter { key in
+            !key.isMinor && key.level <= 2
+                && ExerciseLibrary.scaleExercise(key, hand: .right).fits(in: range) && ExerciseLibrary.scaleExercise(key, hand: .left).fits(in: range)
+        }
+        let scale = (majors.isEmpty ? [ExerciseLibrary.scaleKeys[0]] : majors)[day % max(majors.count, 1)]
         var steps: [PracticeStep] = []
         steps += [step(ExerciseLibrary.patternExercise(id: "walk", position: position, hand: .right), .warmUp)].compactMap { $0 }
         steps += [step(ExerciseLibrary.patternExercise(id: "walk", position: position, hand: .left), .warmUp)].compactMap { $0 }
@@ -287,9 +298,11 @@ enum PracticePlanner {
             if let drill = step(ExerciseLibrary.patternExercise(id: id, position: position, hand: drillHand), .drill) { steps.append(drill) }
         }
 
+        // Finish with an easy, familiar tune: small range, white keys only, short.
         let songs = SongLibrary.all.filter { song in
             let lesson = song.lesson()
-            return (lesson.highestNote ?? 0) - (lesson.lowestNote ?? 0) <= 9
+            return lesson.fits(in: range) && (lesson.highestNote ?? 0) - (lesson.lowestNote ?? 0) <= 9
+                && !lesson.notes.contains { PianoKeys.isBlack($0.noteNumber) } && lesson.notes.count <= 20
         }
         if !songs.isEmpty {
             let song = songs[day % songs.count]

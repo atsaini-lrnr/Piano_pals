@@ -15,6 +15,16 @@ enum KeyboardPreset: String, CaseIterable, Identifiable {
         case .keys88: return "88 keys (A0–C8)"
         }
     }
+    var shortName: String {
+        switch self {
+        case .keys25: return "25 keys"
+        case .keys37: return "37 keys"
+        case .keys49: return "49 keys"
+        case .keys61: return "61 keys"
+        case .keys76: return "76 keys"
+        case .keys88: return "88 keys"
+        }
+    }
     var lowNote: Int {
         switch self {
         case .keys25, .keys37: return 48

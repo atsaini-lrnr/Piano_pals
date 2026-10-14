@@ -162,3 +162,66 @@ final class ExerciseLibraryTests: XCTestCase {
         }
     }
 }
+
+final class SixtyOneKeyTests: XCTestCase {
+    private let sixtyOne = ExerciseLibrary.positions.isEmpty ? 36...96 : KeyboardPreset.keys61.lowNote...KeyboardPreset.keys61.highNote
+
+    func testThePresetIsC2ToC7() {
+        XCTAssertEqual(sixtyOne, 36...96)
+        XCTAssertEqual(PianoKeys.whiteKeyCount(from: 36, to: 96), 36)
+        XCTAssertEqual(KeyboardPreset.keys61.shortName, "61 keys")
+    }
+
+    func testEveryExerciseAndEverySongFitsOn61Keys() {
+        for exercise in ExerciseLibrary.all { XCTAssertTrue(exercise.fits(in: sixtyOne), "\(exercise.id) \(exercise.notes.map(\.pitch).min()!)–\(exercise.notes.map(\.pitch).max()!)") }
+        for song in SongLibrary.all { XCTAssertTrue(song.lesson().fits(in: sixtyOne), song.id) }
+        XCTAssertEqual(ExerciseCategory.allCases.flatMap { ExerciseLibrary.exercises(in: $0, range: sixtyOne) }.count, ExerciseLibrary.all.count)
+    }
+
+    func testSmallerKeyboardsHideWhatDoesNotFit() {
+        let twentyFive = 48...72    // C3–C5
+        let kept = ExerciseCategory.allCases.flatMap { ExerciseLibrary.exercises(in: $0, range: twentyFive) }
+        XCTAssertLessThan(kept.count, ExerciseLibrary.all.count)
+        XCTAssertTrue(kept.allSatisfy { $0.fits(in: twentyFive) })
+        XCTAssertFalse(kept.contains { $0.id == "scale-g-major-left" }, "the left-hand G scale starts at G2")
+        XCTAssertTrue(kept.contains { $0.id == "scale-c-major-right" })
+        let plan = PracticePlanner.dailyPlan(progress: [], range: twentyFive)
+        XCTAssertTrue(plan.steps.allSatisfy { $0.lesson.fits(in: twentyFive) }, plan.steps.map(\.title).joined(separator: ", "))
+    }
+
+    func testTheDailyPlanFitsOn61KeysEveryDay() {
+        let calendar = Calendar(identifier: .gregorian)
+        for day in 1...366 {
+            let date = calendar.date(from: DateComponents(year: 2024, month: 1, day: day))!
+            XCTAssertTrue(PracticePlanner.dailyPlan(progress: [], date: date, calendar: calendar, range: sixtyOne).steps.allSatisfy { $0.lesson.fits(in: sixtyOne) }, "day \(day)")
+        }
+    }
+
+    func testTheOnScreenKeyboardNeverDrawsKeysTheRealOneLacks() {
+        // A tune near the very bottom of a 61-key board (C2) and one at the very top (C7).
+        let bottom = KeyboardSpan.fitting(low: 36, high: 43, minimumWhiteKeys: 15, limit: 36...96)
+        XCTAssertGreaterThanOrEqual(bottom.lowNote, 36)
+        XCTAssertGreaterThanOrEqual(bottom.whiteKeyCount, 15)
+        let top = KeyboardSpan.fitting(low: 89, high: 96, minimumWhiteKeys: 15, limit: 36...96)
+        XCTAssertLessThanOrEqual(top.highNote, 96)
+        XCTAssertGreaterThanOrEqual(top.whiteKeyCount, 15)
+        // Middle of the board: two octaves around the tune.
+        let middle = KeyboardSpan.fitting(low: 60, high: 67, minimumWhiteKeys: 15, limit: 36...96)
+        XCTAssertTrue(middle.contains(60) && middle.contains(67))
+        XCTAssertGreaterThanOrEqual(middle.whiteKeyCount, 15)
+        XCTAssertFalse(PianoKeys.isBlack(middle.lowNote) || PianoKeys.isBlack(middle.highNote))
+    }
+
+    func testMiddleCIsOnScreenForTheCPositionExercises() {
+        let walk = ExerciseLibrary.patternExercise(id: "walk", position: ExerciseLibrary.positions[0], hand: .right)!.lesson()
+        let span = KeyboardSpan.fitting(low: walk.lowestNote!, high: walk.highestNote!, minimumWhiteKeys: 15, limit: sixtyOne)
+        XCTAssertTrue(span.contains(60))
+    }
+
+    func testLessonFitsHelper() {
+        let lesson = Lesson(title: "t", notes: [Note(timestamp: 0, duration: 1, noteNumber: 40, assignedFinger: 1), Note(timestamp: 1, duration: 1, noteNumber: 90, assignedFinger: 5)], source: .library)
+        XCTAssertTrue(lesson.fits(in: 36...96))
+        XCTAssertFalse(lesson.fits(in: 48...72))
+        XCTAssertTrue(Lesson(title: "empty", notes: [], source: .library).fits(in: 48...72))
+    }
+}

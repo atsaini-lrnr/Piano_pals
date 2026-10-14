@@ -22,7 +22,8 @@ private struct LessonContent: View {
     private var span: KeyboardSpan {
         let low = session.lesson?.lowestNote ?? 60
         let high = session.lesson?.highestNote ?? 67
-        return .fitting(low: low, high: high)
+        // As many keys as fit across the screen (at least two octaves), but never keys the real keyboard doesn't have.
+        return .fitting(low: low, high: high, minimumWhiteKeys: 15, limit: app.keyboardRange)
     }
 
     var body: some View {
@@ -41,6 +42,7 @@ private struct LessonContent: View {
                 ConfettiView(model: confetti).ignoresSafeArea()
 
                 if session.phase == .finished { finishedCard }
+                if model.routine?.isFinished == true { practiceDoneCard }
             }
         }
         .onChange(of: session.targets) { _, targets in
@@ -56,7 +58,12 @@ private struct LessonContent: View {
 
             HStack(spacing: 12) {
                 Text(session.lesson?.emoji ?? "🎵").font(.system(size: 52))
-                Text(session.lesson?.title ?? "").font(.kid(34)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(session.lesson?.title ?? "").font(.kid(34)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
+                    if let routine = model.routine {
+                        Text("Practice step \(routine.index + 1) of \(routine.plan.steps.count)").font(.kid(18, weight: .bold)).foregroundStyle(Palette.ink.opacity(0.7))
+                    }
+                }
             }
 
             Spacer(minLength: 8)
@@ -170,6 +177,24 @@ private struct LessonContent: View {
 
     // MARK: Finish
 
+    private var practiceDoneCard: some View {
+        ZStack {
+            Color.black.opacity(0.35).ignoresSafeArea()
+            VStack(spacing: 22) {
+                Text("Practice done!").font(.kid(72)).foregroundStyle(Palette.ink)
+                let earned = model.routine?.stars.reduce(0, +) ?? 0
+                let possible = (model.routine?.stars.count ?? 1) * 3
+                StarRow(filled: min(3, Int((Double(earned) / Double(max(possible, 1)) * 3).rounded())), size: 110)
+                Text("\(model.routine?.stars.count ?? 0) exercises finished").font(.kid(28, weight: .bold)).foregroundStyle(Palette.ink.opacity(0.7))
+                BigButton(title: "Great!", systemImage: "hand.thumbsup.fill", color: Palette.play) { app.endRoutine() }.frame(width: 420)
+            }
+            .padding(40)
+            .background(RoundedRectangle(cornerRadius: 48, style: .continuous).fill(.white))
+            .shadow(radius: 20)
+        }
+        .transition(.scale.combined(with: .opacity))
+    }
+
     private var finishedCard: some View {
         ZStack {
             Color.black.opacity(0.35).ignoresSafeArea()
@@ -178,7 +203,13 @@ private struct LessonContent: View {
                 StarRow(filled: session.stars, size: 110)
                 HStack(spacing: 20) {
                     BigButton(title: "Again", systemImage: "arrow.counterclockwise", color: Palette.blueButton) { app.startLesson() }
-                    BigButton(title: "More songs", systemImage: "music.note.list", color: Palette.play) { app.leaveLesson() }
+                    if let routine = model.routine {
+                        BigButton(title: routine.hasNext ? "Next" : "Finish", systemImage: routine.hasNext ? "forward.fill" : "flag.checkered", color: Palette.play) {
+                            app.advanceRoutine()
+                        }
+                    } else {
+                        BigButton(title: "More songs", systemImage: "music.note.list", color: Palette.play) { app.leaveLesson() }
+                    }
                 }
                 .frame(width: 720)
             }

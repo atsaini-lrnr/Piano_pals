@@ -8,6 +8,7 @@ final class AppModel: ObservableObject {
     enum Screen: Equatable {
         case home
         case songs
+        case practice
         case lesson
         case calibration
     }
@@ -32,6 +33,26 @@ final class AppModel: ObservableObject {
     @Published private(set) var progress: [SessionSummary] = []
     /// Plain-language note for the grown-up about the latest session.
     @Published private(set) var parentNote: String?
+    /// The practice block being worked through, if any.
+    @Published private(set) var routine: RoutineState?
+    /// Where "back" goes from a lesson (the song list or the practice screen).
+    private var lessonReturnScreen: Screen = .songs
+
+    struct RoutineState {
+        let plan: PracticePlan
+        var index = 0
+        var stars: [Int] = []
+
+        var current: PracticeStep? { plan.steps.indices.contains(index) ? plan.steps[index] : nil }
+        var hasNext: Bool { index + 1 < plan.steps.count }
+        var isFinished: Bool { index >= plan.steps.count }
+    }
+
+    var dailyPlan: PracticePlan { PracticePlanner.dailyPlan(progress: progress, range: keyboardRange) }
+
+    /// Songs that fit on the chosen keyboard size.
+    var visibleSongs: [Lesson] { songs.filter { $0.fits(in: keyboardRange) } }
+    var hiddenSongCount: Int { songs.count - visibleSongs.count }
 
     let settings: AppSettings
     let midi = MIDIManager()
@@ -171,8 +192,9 @@ final class AppModel: ObservableObject {
 
     // MARK: Lessons
 
-    func open(_ lesson: Lesson) {
+    func open(_ lesson: Lesson, returnTo: Screen = .songs) {
         session.load(lesson)
+        lessonReturnScreen = returnTo
         screen = .lesson
         narrator.say("Let's play \(lesson.title)! Press the green button to start.")
     }
@@ -187,7 +209,38 @@ final class AppModel: ObservableObject {
         coachClock?.cancel()
         session.stop()
         narrator.stop()
-        screen = .songs
+        routine = nil
+        screen = lessonReturnScreen
+    }
+
+    // MARK: Practice
+
+    func startRoutine(_ plan: PracticePlan) {
+        routine = RoutineState(plan: plan)
+        if let step = routine?.current { open(step.lesson, returnTo: .practice) }
+        narrator.say("Time to practice! Let's start with a warm-up.")
+    }
+
+    /// Called from the finish card: records the stars and opens the next step (or finishes the block).
+    func advanceRoutine() {
+        guard var state = routine else { return }
+        state.stars.append(session.stars)
+        if state.hasNext {
+            state.index += 1
+            routine = state
+            if let step = state.current { open(step.lesson, returnTo: .practice) }
+        } else {
+            state.index = state.plan.steps.count
+            routine = state
+            session.stop()
+            narrator.say("Wow! You finished your practice!")
+            confetti.fire(.finale, at: CGPoint(x: 0.5, y: 0.3), accent: Palette.sunny)
+        }
+    }
+
+    func endRoutine() {
+        routine = nil
+        screen = .practice
     }
 
     func generateLesson(from text: String) async {
@@ -466,6 +519,7 @@ extension AppModel {
         switch defaults.string(forKey: "debugScreen") {
         case "songs": screen = .songs
         case "calibration": screen = .calibration
+        case "practice": screen = .practice
         case "lesson":
             if session.lesson == nil, let first = songs.first { session.load(first) }
             screen = .lesson

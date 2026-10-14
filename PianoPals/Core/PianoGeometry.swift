@@ -77,12 +77,12 @@ struct KeyboardSpan: Equatable, Sendable {
     let highNote: Int
 
     /// Whole-lesson span, padded by one white key either side and widened to at least `minimumWhiteKeys`.
-    static func fitting(low: Int, high: Int, minimumWhiteKeys: Int = 8) -> KeyboardSpan {
+    /// `limit` is the real keyboard's range (default: an 88-key piano), so the screen never draws keys the player doesn't have.
+    static func fitting(low: Int, high: Int, minimumWhiteKeys: Int = 8, limit: ClosedRange<Int> = 21...108) -> KeyboardSpan {
         var lowWhite = PianoKeys.whiteIndex(low) - 1
         var highWhite = PianoKeys.whiteIndex(high) + 1
-        // Never run off the bottom/top of an 88-key piano (A0 = 21 … C8 = 108).
-        let minWhite = PianoKeys.whiteIndex(21)
-        let maxWhite = PianoKeys.whiteIndex(108)
+        let minWhite = PianoKeys.whiteIndex(limit.lowerBound)
+        let maxWhite = PianoKeys.whiteIndex(limit.upperBound)
         lowWhite = max(lowWhite, minWhite)
         highWhite = min(highWhite, maxWhite)
         while highWhite - lowWhite + 1 < minimumWhiteKeys {

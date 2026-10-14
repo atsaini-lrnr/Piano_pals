@@ -130,4 +130,10 @@ struct Lesson: Identifiable, Equatable, Sendable {
     var duration: TimeInterval { notes.map(\.endTime).max() ?? 0 }
     var lowestNote: Int? { notes.map(\.noteNumber).min() }
     var highestNote: Int? { notes.map(\.noteNumber).max() }
+
+    /// True when every note exists on a keyboard covering `range`.
+    func fits(in range: ClosedRange<Int>) -> Bool {
+        guard let low = lowestNote, let high = highestNote else { return true }
+        return low >= range.lowerBound && high <= range.upperBound
+    }
 }

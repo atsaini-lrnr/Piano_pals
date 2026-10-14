@@ -59,6 +59,17 @@ private struct KeyView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Palette.ink.opacity(isBlack ? 0 : 0.35), lineWidth: 2))
                     .shadow(color: .black.opacity(isBlack ? 0.35 : 0.12), radius: 3, y: isActive ? 1 : 4)
 
+                if !isBlack, note % 12 == 0, target == nil {
+                    VStack(spacing: 2) {
+                        if note == 60 { Image(systemName: "star.fill").font(.system(size: min(geo.size.width * 0.3, 22))).foregroundStyle(Palette.sunny) }
+                        Text(note == 60 ? "Middle C" : PianoKeys.name(note))
+                            .font(.kid(min(geo.size.width * 0.26, 16), weight: .bold)).foregroundStyle(Palette.ink.opacity(0.55))
+                            .lineLimit(1).minimumScaleFactor(0.5)
+                    }
+                    .padding(.bottom, 10)
+                    .allowsHitTesting(false)
+                }
+
                 if let target {
                     TargetGlow(color: target.note.finger.color)
                         .padding(isBlack ? 2 : 3)

@@ -9,6 +9,7 @@ struct RootView: View {
             switch app.screen {
             case .home: HomeView().transition(.opacity)
             case .songs: SongPickerView().transition(.move(edge: .trailing))
+            case .practice: PracticeView().transition(.move(edge: .trailing))
             case .lesson: LessonView().transition(.move(edge: .trailing))
             case .calibration: CalibrationView(app: app).transition(.move(edge: .bottom))
             }

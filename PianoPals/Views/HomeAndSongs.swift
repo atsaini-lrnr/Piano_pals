@@ -26,13 +26,17 @@ private struct HomeContent: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                VStack(spacing: 26) {
+                VStack(spacing: 20) {
                     Spacer()
-                    BigButton(title: "Play!", systemImage: "play.fill", color: Palette.play, height: 150, fontSize: 56) {
+                    BigButton(title: "Play!", systemImage: "play.fill", color: Palette.play, height: 140, fontSize: 52) {
                         app.screen = .songs
                         app.narrator.say("Pick a song!")
                     }
-                    BigButton(title: "My Hands", systemImage: "hand.raised.fill", color: Palette.blueButton, height: 130, fontSize: 46) {
+                    BigButton(title: "Practice", systemImage: "figure.strengthtraining.traditional", color: Palette.pink, height: 130, fontSize: 46) {
+                        app.screen = .practice
+                        app.narrator.say("Let's practice!")
+                    }
+                    BigButton(title: "My Hands", systemImage: "hand.raised.fill", color: Palette.blueButton, height: 110, fontSize: 40) {
                         app.screen = .calibration
                     }
                     Spacer()
@@ -65,9 +69,13 @@ struct SongPickerView: View {
                     Text("Pick a song!").font(.kid(60)).foregroundStyle(Palette.ink)
                     Spacer()
                 }
+                if app.hiddenSongCount > 0 {
+                    Text("\(app.hiddenSongCount) song\(app.hiddenSongCount == 1 ? "" : "s") need a bigger keyboard than \(app.settings.keyboardPreset.shortName).")
+                        .font(.kid(20, weight: .bold)).foregroundStyle(Palette.ink.opacity(0.6))
+                }
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 24) {
-                        ForEach(app.songs) { song in
+                        ForEach(app.visibleSongs) { song in
                             Button { app.open(song) } label: { SongCard(lesson: song) }
                                 .buttonStyle(BouncyButtonStyle())
                         }

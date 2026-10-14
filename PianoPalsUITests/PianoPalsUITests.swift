@@ -172,3 +172,40 @@ final class PianoPalsAIFlowUITests: XCTestCase {
         XCTAssertTrue(found, "the finished song appears under Progress")
     }
 }
+
+
+final class PianoPalsPracticeUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    private func launch(_ extra: [String]) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO"] + extra
+        app.launch()
+        return app
+    }
+
+    func testPracticeBlockRunsFromFirstStepThroughNext() {
+        let app = launch(["-debugScreen", "practice"])
+        XCTAssertTrue(app.buttons["Start practice"].waitForExistence(timeout: 10))
+        app.buttons["Start practice"].tap()
+        // Step 1 is the right-hand five-finger walk in C position: C D E F G F E D C.
+        let stepLabel = { (n: Int) in app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Practice step \(n) of")).firstMatch }
+        XCTAssertTrue(stepLabel(1).waitForExistence(timeout: 8))
+        let walk = ["C4", "D4", "E4", "F4", "G4", "F4", "E4", "D4", "C4"]
+        for name in walk {
+            let key = app.buttons[name].firstMatch
+            XCTAssertTrue(key.waitForExistence(timeout: 5), name)
+            key.tap()
+            usleep(250_000)
+        }
+        XCTAssertTrue(app.staticTexts["You did it!"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Next"].exists, "a practice block offers Next, not More songs")
+        app.buttons["Next"].tap()
+        XCTAssertTrue(stepLabel(2).waitForExistence(timeout: 8))
+    }
+
+    func testPracticeListShowsScalesForBothHands() {
+        let app = launch(["-debugScreen", "practice"])
+        XCTAssertTrue(app.staticTexts["Scales"].waitForExistence(timeout: 10) || app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Scales'")).firstMatch.waitForExistence(timeout: 5))
+    }
+}
