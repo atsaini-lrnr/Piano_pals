@@ -289,7 +289,11 @@ private struct CompanionSection: View {
                 Button("Disconnect") { link.disconnect() }.buttonStyle(.bordered)
             }
         case .connecting(let name):
-            HStack { ProgressView(); Text("Connecting to \(name)…") }
+            HStack {
+                ProgressView(); Text("Connecting to \(name)…")
+                Spacer()
+                Button("Cancel") { link.disconnect() }.buttonStyle(.bordered)
+            }
         case .idle, .searching:
             if link.nearby.isEmpty {
                 HStack { ProgressView(); Text("Looking for iPhones in camera mode…").foregroundStyle(.secondary) }
