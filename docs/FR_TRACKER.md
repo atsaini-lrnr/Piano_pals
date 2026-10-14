@@ -53,7 +53,8 @@ Live board (cards, owner, progress log): https://claude.ai/artifact/JdcUVmY8p43D
 | F13 / E1–E5 | Beginner exercises, scales RH/LH, daily practice block | ✅ E1–E5 (UI-tested) | |
 | F14 / W1–W6 | Search the web (Mutopia, Wikimedia Commons) for grown-ups, licence-gated, convert to lesson | ✅ W1–W4, W6 (unit + UI tests) · W5 live: 10/10 titles had ≥1 open-licence MIDI; end-to-end add of “Ode to Joy” verified in simulator | `OnlineMelodySearch.swift`; explicit button, licence badges |
 | F15 / T1–T6 | On-device audio → notes (Basic Pitch Core ML + YIN fallback) | ✅ T1–T4, T6 (simulator 0.19 s for 30 s; device timing 🟡) · 🟡 T5 real piano clip still needed | `Transcribe/`; Basic Pitch Core ML (Apache-2.0, 270 KB, bundled); end-to-end verified in simulator |
-| F16 (NEW, from board) | Free "AI-MIDI / Songscription / YouTube-to-MIDI" style conversion: write-up of what it takes and which parts are free | ⬜ | overlaps F15; YouTube audio extraction breaks YouTube's terms, so link → title only |
+| F16 (from board) | What "AI-MIDI / Songscription / YouTube-to-MIDI" tools take and what is free | ✅ write-up: `docs/PRD_V4_SEARCH_AND_CONVERT.md` | on-device F15 already covers the free part; YouTube audio extraction not done (YouTube terms) |
+| F17 (NEW, from board) | Browser-like song search for grown-ups: options list (Apple catalogue, MusicBrainz, free files), pick, then use library / open file / your recording, with progress | ⬜ planned, needs OK to send search words to Apple + MusicBrainz | plan in the same doc, §4 |
 | MAC | Runs on Mac (Catalyst) | 🟡 | builds & tests pass; user hasn't looked yet |
 
 ## D. Order of work (don't skip ahead)
