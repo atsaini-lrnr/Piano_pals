@@ -46,12 +46,17 @@ struct SongSearchView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                searchSection
-                if let results = state.results {
-                    stepsSection(results)
-                    if let song = state.chosen { chosenSection(song) }
-                    resultSections(results)
+            ScrollViewReader { proxy in
+                List {
+                    searchSection
+                    if let results = state.results {
+                        // Once a song is picked its options come first and are scrolled into view; the finished steps step aside.
+                        if let song = state.chosen { chosenSection(song).id("chosen") } else { stepsSection(results) }
+                        resultSections(results)
+                    }
+                }
+                .onChange(of: state.chosen?.id) { _, id in
+                    if id != nil { withAnimation { proxy.scrollTo("chosen", anchor: .top) } }
                 }
             }
             .navigationTitle("Find a song")
@@ -195,7 +200,7 @@ struct SongSearchView: View {
     // MARK: What can we do?
 
     private func chosenSection(_ song: CatalogSong) -> some View {
-        Section("What we can do for “\(song.title)”") {
+        Section("What we can do for “\(song.title)” by \(song.artist)") {
             if let options = state.options {
                 if let library = options.library {
                     Button { app.addSuggestion(library) } label: { Label("Add “\(library.title)” from the free library", systemImage: "books.vertical") }
@@ -213,6 +218,7 @@ struct SongSearchView: View {
             Button { listening = true } label: { Label("Play or hum it near the iPad", systemImage: "mic") }
             Button { app.makePracticeTune(for: song.title) } label: { Label("Make a practice tune (not the real song)", systemImage: "music.note") }
             progress
+            Button { preview.stop(); app.chooseCatalogSong(nil) } label: { Label("Pick a different song", systemImage: "arrow.uturn.backward") }
         }
         .accessibilityIdentifier("whatWeCanDo")
     }

@@ -684,7 +684,10 @@ extension AppModel {
             Task { @MainActor in await transcribeRecording(at: URL(fileURLWithPath: path)) }
         }
         if let find = defaults.string(forKey: "debugSongSearch") {
-            Task { @MainActor in await searchSongs(find) }
+            Task { @MainActor in
+                await searchSongs(find)
+                if defaults.bool(forKey: "debugChooseFirst") { chooseCatalogSong(songSearch.results?.catalogue.first) }
+            }
         }
         if let web = defaults.string(forKey: "debugWebSearch") {
             Task { @MainActor in

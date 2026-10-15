@@ -41,7 +41,9 @@ private struct GrownUpsContent: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $listening) { ListenView(app: app) }
-            .sheet(isPresented: $findingSong) { SongSearchView(app: app) }
+            .sheet(isPresented: $findingSong) {
+                if #available(iOS 18, *) { SongSearchView(app: app).presentationSizing(.page) } else { SongSearchView(app: app) }
+            }
             #if DEBUG
             .onAppear { if UserDefaults.standard.bool(forKey: "debugFindSong") { findingSong = true } }
             #endif
