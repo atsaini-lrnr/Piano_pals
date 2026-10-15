@@ -173,7 +173,7 @@ final class CompanionHost: NSObject, ObservableObject, @unchecked Sendable {
     }
 
     func send(previewJPEG: Data, width: Int, height: Int) {
-        guard let connection = active, state == .connected, previewJPEG.count < 60_000 else { return }
+        guard let connection = active, state == .connected, previewJPEG.count < 200_000 else { return }
         connection.send(.preview(jpeg: previewJPEG, w: width, h: height), droppable: true)
     }
 }

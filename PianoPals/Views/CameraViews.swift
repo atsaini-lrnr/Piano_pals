@@ -1,23 +1,6 @@
 import SwiftUI
 
 /// One camera's live picture with the hand overlay on top (or a friendly placeholder when there's no camera).
-/// The rounded, bordered, fixed-aspect frame around a camera tile (skipped in the wide pan-and-zoom view).
-private struct TileFrame: ViewModifier {
-    let enabled: Bool
-    let aspect: CGFloat
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content.aspectRatio(aspect, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white, lineWidth: 4))
-                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
-        } else {
-            content
-        }
-    }
-}
-
 struct CameraTile: View {
     @ObservedObject var channel: CameraChannel
     let title: String
@@ -26,8 +9,6 @@ struct CameraTile: View {
     var demoBackdrop = false
     var coaching: CoachingContext?
     var placeholderButton: (title: String, action: () -> Void)?
-    /// False inside the wide pan-and-zoom view: no title badge, rounded border or fixed aspect (the container sizes it).
-    var chrome = true
 
     /// Width ÷ height of what the channel shows (16:9 until it is running).
     static func aspect(of channel: CameraChannel) -> CGFloat {
@@ -52,7 +33,7 @@ struct CameraTile: View {
                 CoachingOverlayView(frame: channel.latestFrame, context: coaching, imageSize: channel.latestFrame?.imageSize ?? channel.videoSize)
             }
 
-            if chrome { VStack {
+            VStack {
                 HStack {
                     Label(title, systemImage: channel.deviceInfo?.symbolName ?? "video")
                         .font(.kid(18, weight: .bold))
@@ -69,14 +50,17 @@ struct CameraTile: View {
                 }
                 Spacer()
             }
-            .padding(10) }
+            .padding(10)
 
             if channel.state == .interrupted {
                 Text("Camera paused…").font(.kid(24)).foregroundStyle(.white)
                     .padding(16).background(RoundedRectangle(cornerRadius: 16).fill(.black.opacity(0.6)))
             }
         }
-        .modifier(TileFrame(enabled: chrome, aspect: CameraTile.aspect(of: channel)))
+        .aspectRatio(CameraTile.aspect(of: channel), contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white, lineWidth: 4))
+        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }

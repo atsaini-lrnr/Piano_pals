@@ -155,7 +155,7 @@ struct MistakeAnalyzer: Sendable {
             stats.pushRecent(true)
             mistakes.append(Mistake(time: now, kind: .skippedNote))
 
-        case .finished, .freePlay:
+        case .finished, .freePlay, .rewound:
             break
         }
         return mistakes

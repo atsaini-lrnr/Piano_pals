@@ -154,9 +154,9 @@ final class CompanionProtocolTests: XCTestCase {
         CVPixelBufferCreate(nil, 1920, 1080, kCVPixelFormatType_32BGRA, nil, &buffer)
         let pixels = try XCTUnwrap(buffer)
         let result = try XCTUnwrap(PreviewEncoder().jpeg(from: pixels))
-        XCTAssertEqual(result.width, 480)
-        XCTAssertEqual(result.height, 270)
-        XCTAssertLessThan(result.data.count, 60_000, "fits the 60 KB limit used when sending")
+        XCTAssertEqual(result.width, 960)
+        XCTAssertEqual(result.height, 540)
+        XCTAssertLessThan(result.data.count, 200_000, "fits the 200 KB limit used when sending")
         XCTAssertNotNil(UIImage(data: result.data))
     }
 

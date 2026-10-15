@@ -150,6 +150,8 @@ final class AppModel: ObservableObject {
 
         // Settings → live objects.
         settings.$paceMode.sink { [weak self] in self?.session.mode = $0 }.store(in: &cancellables)
+        session.redoOnWrongFinger = settings.redoOnWrongFinger
+        settings.$redoOnWrongFinger.sink { [weak self] in self?.session.redoOnWrongFinger = $0 }.store(in: &cancellables)
         settings.$tempoScale.sink { [weak self] in self?.session.tempoScale = $0 }.store(in: &cancellables)
         settings.$narrationEnabled.sink { [weak self] in self?.narrator.isEnabled = $0 }.store(in: &cancellables)
         settings.$keyboardPreset.dropFirst().sink { [weak self] _ in self?.loadRegions() }.store(in: &cancellables)
@@ -484,6 +486,10 @@ final class AppModel: ObservableObject {
             case .fingerOff, .wrongHand:
                 confetti.fire(.sparkle, at: origin, accent: note.finger.color)
             }
+        case .rewound:
+            let text = CoachPhrases.replay[Int.random(in: 0..<CoachPhrases.replay.count)]
+            show(message: text)
+            narrator.say(text, interrupt: false)
         case .finished:
             confetti.fire(.finale, at: CGPoint(x: 0.5, y: 0.35), accent: Palette.sunny)
             synth.playChime()

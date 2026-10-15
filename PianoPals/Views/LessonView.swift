@@ -106,21 +106,18 @@ private struct LessonContent: View {
         }
     }
 
-    /// One wide camera view, edge to edge, iPhone first (the tracking channel): pinch to zoom, drag to move, double-tap to reset.
-    /// Used until the keyboard is calibrated, or with no overhead view.
+    /// The whole camera picture as the camera sees it (nothing cropped or zoomed), iPhone first. Used until the keyboard is
+    /// calibrated, or with no overhead view. The hand dots sit on the fingers exactly as on the phone.
     private func unalignedBand(size: CGSize, showHint: Bool) -> some View {
         let id = cameras.trackingChannel
         let channel = cameras.channel(id)
-        let aspect = CameraTile.aspect(of: channel)
         return ZStack(alignment: .top) {
-            PanZoomView(contentSize: CGSize(width: size.width, height: size.width / aspect), container: size, anchorY: 0.65) {
-                CameraTile(channel: channel, title: id == .primary ? "Side view" : "Top view", highlight: session.targets.first?.note.finger,
-                           isTracking: true, demoBackdrop: settings.demoHands && id == .primary && channel.state != .running,
-                           coaching: model.coachingContext(for: id),
-                           placeholderButton: id == .overhead && channel.state != .running && cameras.authorization == .authorized
-                               ? ("Use my iPhone", { app.showCameraPicker = true }) : nil, chrome: false)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            CameraTile(channel: channel, title: id == .primary ? "Side view" : "Top view", highlight: session.targets.first?.note.finger,
+                       isTracking: true, demoBackdrop: settings.demoHands && id == .primary && channel.state != .running,
+                       coaching: model.coachingContext(for: id),
+                       placeholderButton: id == .overhead && channel.state != .running && cameras.authorization == .authorized
+                           ? ("Use my iPhone", { app.showCameraPicker = true }) : nil)
+                .frame(width: size.width, height: size.height)
             HStack(alignment: .top, spacing: 8) {
                 AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt).frame(width: 120, height: 130)
                 coachBubble

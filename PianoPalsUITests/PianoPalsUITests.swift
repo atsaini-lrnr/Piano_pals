@@ -243,6 +243,7 @@ final class PianoPalsLayoutUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
     func testCameraSitsAboveTheLessonAndTheKeyboardSpansTheScreen() {
+        XCUIDevice.shared.orientation = .landscapeLeft   // the simulator can be left rotated by an earlier run
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO", "-debugScreen", "lesson",
                                "-debugSong", "five finger", "-demoHands", "YES"]

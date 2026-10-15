@@ -8,8 +8,8 @@ import UniformTypeIdentifiers
 final class PreviewEncoder {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
-    var targetWidth: CGFloat = 480
-    var quality: CGFloat = 0.5
+    var targetWidth: CGFloat = 960
+    var quality: CGFloat = 0.6
 
     func jpeg(from pixelBuffer: CVPixelBuffer) -> (data: Data, width: Int, height: Int)? {
         let image = CIImage(cvPixelBuffer: pixelBuffer)

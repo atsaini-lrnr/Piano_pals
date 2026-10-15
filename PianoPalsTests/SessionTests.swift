@@ -86,6 +86,7 @@ final class LessonSessionTests: XCTestCase {
 
     func testWrongFingerStillAdvancesButIsReported() {
         let session = makeSession(lesson())
+        session.redoOnWrongFinger = false
         let events = collect(session)
         session.start()
         advance(5)
@@ -97,6 +98,7 @@ final class LessonSessionTests: XCTestCase {
 
     func testWrongHandCountsAsAFingerMismatch() {
         let session = makeSession(lesson())
+        session.redoOnWrongFinger = false
         session.start()
         advance(5)
         session.handleNoteOn(note: 60, detected: DetectedFinger(finger: .thumb, hand: .left, channel: .overhead, distance: 0))
@@ -105,6 +107,7 @@ final class LessonSessionTests: XCTestCase {
 
     func testStarsReflectFingerAccuracyButAlwaysAtLeastOne() {
         let session = makeSession(lesson("C4 D4 E4 F4"))
+        session.redoOnWrongFinger = false     // this test is about the score, not the replay
         session.start()
         let wrong = DetectedFinger(finger: .pinky, hand: .right, channel: .overhead, distance: 0)
         for note in [60, 62, 64, 65] {
@@ -115,6 +118,7 @@ final class LessonSessionTests: XCTestCase {
         XCTAssertEqual(session.stars, 2, "right keys with the wrong finger still earn a generous two stars")
 
         let mixed = makeSession(lesson("C4 D4 E4 F4"))
+        mixed.redoOnWrongFinger = false
         mixed.start()
         let right = [Finger.thumb, .index, .middle, .ring]
         for (index, note) in [60, 62, 64, 65].enumerated() {
@@ -233,6 +237,76 @@ final class LessonSessionTests: XCTestCase {
         session.start()
         XCTAssertEqual(session.phase, .idle)
     }
+
+    // MARK: Wrong finger: pause and play the last 2 seconds again
+
+    private let ring = DetectedFinger(finger: .pinky, hand: .right, channel: .overhead, distance: 0.1)
+    private func right(_ note: Note) -> DetectedFinger { DetectedFinger(finger: note.finger, hand: .right, channel: .overhead, distance: 0.05) }
+
+    func testWrongFingerStepsBackTwoSecondsAndWaitsForTheRightFinger() {
+        let session = makeSession(lesson("C4 D4 E4 F4 G4"))   // one note per second at 60 bpm
+        let events = collect(session)
+        session.start()
+        advance(5)                                           // note 0 at t = 0
+        session.handleNoteOn(note: 60, detected: right(session.lesson!.notes[0]))
+        advance(1)
+        session.handleNoteOn(note: 62, detected: right(session.lesson!.notes[1]))
+        advance(1)
+        session.handleNoteOn(note: 64, detected: right(session.lesson!.notes[2]))
+        advance(1)
+        XCTAssertEqual(session.noteProgress.filter { $0 != .pending }.count, 3)
+
+        session.handleNoteOn(note: 65, detected: ring)       // note at t = 3, wrong finger
+        XCTAssertEqual(session.noteProgress, [.hit(.perfect), .pending, .pending, .pending, .pending],
+                       "notes from 1 s to 3 s are pending again; note 0 (older than 2 s) stays")
+        XCTAssertEqual(session.targets.map(\.note.noteNumber), [62], "back at the note 2 seconds earlier")
+        XCTAssertTrue(events().contains(.rewound(to: 1)))
+        XCTAssertTrue(events().contains(.noteHit(index: 3, note: session.lesson!.notes[3], quality: .fingerOff(played: .pinky))), "the correction still reaches the coach")
+        advance(10)
+        XCTAssertEqual(session.songTime(at: now), 1, accuracy: 1e-6, "the clock waits at the replayed note")
+    }
+
+    func testPlayAlongHoldsTheClockAfterARewindThenResumes() {
+        let session = makeSession(lesson("C4 D4 E4 F4 G4"), mode: .playAlong)
+        session.start()
+        advance(2)                                           // song time 0: note 0 is due; play it correctly
+        session.handleNoteOn(note: 60, detected: right(session.lesson!.notes[0]))
+        advance(3)                                           // song time 3: note 3 (F4) is due
+        session.handleNoteOn(note: 65, detected: ring)       // wrong finger → back to 2 s earlier (t = 1)
+        XCTAssertEqual(session.songTime(at: now), 1, accuracy: 1e-6)
+        XCTAssertEqual(session.noteProgress[0], .hit(.perfect), "notes older than 2 s are kept")
+        advance(10)
+        XCTAssertEqual(session.songTime(at: now), 1, accuracy: 1e-6, "play-along waits too, until the replay starts")
+        session.handleNoteOn(note: 62, detected: right(session.lesson!.notes[1]))
+        advance(1)
+        XCTAssertGreaterThan(session.songTime(at: now), 1.5, "after the first correct replayed note it flows again")
+    }
+
+    func testUnverifiedFingersNeverTriggerAReplay() {
+        let session = makeSession(lesson())
+        session.start()
+        advance(5)
+        session.handleNoteOn(note: 60, detected: nil)
+        XCTAssertEqual(session.noteProgress[0], .hit(.fingerUnverified))
+    }
+
+    func testAfterThreeReplaysTheNoteIsAcceptedSoTheChildIsNeverStuck() {
+        let session = makeSession(lesson())
+        session.start()
+        advance(5)
+        for _ in 0..<3 { session.handleNoteOn(note: 60, detected: ring); XCTAssertEqual(session.noteProgress[0], .pending) }
+        session.handleNoteOn(note: 60, detected: ring)
+        XCTAssertEqual(session.noteProgress[0], .hit(.fingerOff(played: .pinky)), "fourth time: accepted")
+    }
+
+    func testTurningTheReplayOffKeepsTheOldBehaviour() {
+        let session = makeSession(lesson())
+        session.redoOnWrongFinger = false
+        session.start()
+        advance(5)
+        session.handleNoteOn(note: 60, detected: ring)
+        XCTAssertEqual(session.noteProgress[0], .hit(.fingerOff(played: .pinky)))
+    }
 }
 
 @MainActor
@@ -320,4 +394,5 @@ final class CalibrationFlowTests: XCTestCase {
         store.clear(channel: .overhead)
         XCTAssertNil(store.load(channel: .overhead, firstNote: 36, lastNote: 96))
     }
+
 }

@@ -12,6 +12,13 @@ enum PaceMode: String, CaseIterable, Identifiable {
 }
 
 enum HitQuality: Equatable {
+    var isWrongFinger: Bool {
+        switch self {
+        case .fingerOff, .wrongHand: return true
+        case .perfect, .fingerUnverified: return false
+        }
+    }
+
     /// Right key, and the camera saw the right finger on it.
     case perfect
     /// Right key; the camera couldn't tell which finger was used.
@@ -58,6 +65,8 @@ enum SessionEvent: Equatable {
     case noteMissed(index: Int, note: Note)
     case freePlay(note: Int)
     case finished(stars: Int)
+    /// A wrong finger was seen on a key, so the lesson stepped back (to this song time) to replay the last moments.
+    case rewound(to: TimeInterval)
 }
 
 /// The lesson engine: tracks the song clock, which notes are expected, and what the child has played.
@@ -78,6 +87,10 @@ final class LessonSession: ObservableObject {
     static let leadIn: TimeInterval = 2.0
     /// In "play along" mode, how far from a note's time a key still counts.
     static let hitWindow: TimeInterval = 0.7
+    /// How far the lesson steps back when the camera sees the wrong finger on a key.
+    static let rewindSeconds: TimeInterval = 2
+    /// After this many replays in a row the note is simply accepted, so a child is never stuck.
+    static let maximumReplays = 3
 
     @Published private(set) var lesson: Lesson?
     @Published private(set) var phase: Phase = .idle
@@ -100,6 +113,9 @@ final class LessonSession: ObservableObject {
         }
     }
 
+    /// When the camera sees the wrong finger (or hand) on the right key: pause, step back 2 seconds and replay with the right finger.
+    var redoOnWrongFinger = true
+
     let events = PassthroughSubject<SessionEvent, Never>()
     /// Injectable for tests.
     var clock: () -> Date = { Date() }
@@ -108,6 +124,9 @@ final class LessonSession: ObservableObject {
     private var anchorWall = Date()
     private var frozenTime: TimeInterval = -LessonSession.leadIn
     private var tickTask: Task<Void, Never>?
+    private var replayStreak = 0
+    /// After a rewind the clock waits for the first replayed note, in either pacing mode.
+    private var retryHold = false
 
     deinit { tickTask?.cancel() }
 
@@ -126,7 +145,7 @@ final class LessonSession: ObservableObject {
     private func songTime(at date: Date, scale: Double, mode: PaceMode) -> TimeInterval {
         guard phase == .playing else { return frozenTime }
         var time = anchorSong + date.timeIntervalSince(anchorWall) * scale
-        if mode == .waitForMe, let limit = holdLimit { time = min(time, limit) }
+        if mode == .waitForMe || retryHold, let limit = holdLimit { time = min(time, limit) }
         return time
     }
 
@@ -145,6 +164,8 @@ final class LessonSession: ObservableObject {
         keyFeedback = [:]
         stars = 0
         consecutiveWrong = 0
+        replayStreak = 0
+        retryHold = false
         frozenTime = -LessonSession.leadIn
         anchorSong = frozenTime
         phase = lesson.notes.isEmpty ? .idle : .ready
@@ -157,6 +178,8 @@ final class LessonSession: ObservableObject {
         keyFeedback = [:]
         stars = 0
         consecutiveWrong = 0
+        replayStreak = 0
+        retryHold = false
         frozenTime = -LessonSession.leadIn
         anchorSong = frozenTime
         anchorWall = clock()
@@ -214,7 +237,27 @@ final class LessonSession: ObservableObject {
         keyFeedback[pitch] = KeyFeedback(kind: .success)
         refreshTargets()
         events.send(.noteHit(index: index, note: expected, quality: quality))
+        if redoOnWrongFinger, quality.isWrongFinger, replayStreak < LessonSession.maximumReplays {
+            replayStreak += 1
+            rewind(from: expected.timestamp, now: now)
+            return
+        }
+        if !quality.isWrongFinger { replayStreak = 0 }
+        retryHold = false
         finishIfComplete()
+    }
+
+    /// Puts the last `rewindSeconds` of notes (and the note just played) back to pending and holds the clock there.
+    private func rewind(from timestamp: TimeInterval, now: Date) {
+        guard let lesson else { return }
+        let start = max(timestamp - LessonSession.rewindSeconds, -LessonSession.leadIn)
+        for index in lesson.notes.indices where lesson.notes[index].timestamp >= start && lesson.notes[index].timestamp <= timestamp {
+            noteProgress[index] = .pending
+        }
+        retryHold = true
+        reanchor(at: now, time: start)
+        refreshTargets()
+        events.send(.rewound(to: start))
     }
 
     private func matchingIndex(for pitch: Int, at time: TimeInterval) -> Int? {

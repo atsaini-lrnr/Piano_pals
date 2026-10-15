@@ -22,6 +22,7 @@ enum CoachPhrases {
     static let waitForMe = ["I'll wait for you! Play when you're ready.", "Let's wait for each note together!"]
     static let streak = ["Five in a row! Amazing!", "Ten in a row! You're a star!", "Fifteen in a row! Wow!"]
     static let finish = ["You did it! Great playing!", "Wow! Three stars!", "Hooray! You finished the song!"]
+    static let replay = ["Let's play those notes again with the ringed finger!", "Let's try that bit again! Watch the ringed finger."]
     static let practiceNext = ["Next time, let's practice your %@ finger!"]
 
     static func formatFinger(_ template: String, _ finger: Finger) -> String {

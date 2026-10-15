@@ -31,6 +31,7 @@ final class AvatarModel: ObservableObject {
             }
         case .gentleMiss: set(.encouraging, for: 1.8)
         case .noteMissed: break
+        case .rewound: set(.encouraging, for: 1.8)
         case .finished: celebrationCount += 1; set(.cheering, for: 4.5)
         case .freePlay: set(.happy, for: 0.8)
         }

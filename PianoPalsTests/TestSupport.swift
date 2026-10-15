@@ -19,7 +19,7 @@ extension CoachPhrases {
         for template in fingerTip { for finger in Finger.allCases { all.append(formatFinger(template, finger)) } }
         for template in handTip { all += ["left", "right"].map { String(format: template, $0) } }
         for template in practiceNext { all += Finger.allCases.map { String(format: template, $0.kidName) } }
-        all += lookForGlow + hesitation + slower + waitForMe + streak + finish
+        all += lookForGlow + hesitation + slower + waitForMe + streak + finish + replay
         return all
     }
 }
