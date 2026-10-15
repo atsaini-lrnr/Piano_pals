@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 OUT="${TMPDIR:-/tmp}/ddInstall"
 xcodebuild build -project PianoPals.xcodeproj -scheme PianoPals -destination 'generic/platform=iOS' -configuration Debug -derivedDataPath "$OUT" -allowProvisioningUpdates > "$OUT.log" 2>&1 || { grep error: "$OUT.log" | sort -u; exit 1; }
 APP=$(find "$OUT" -name PianoPals.app -path "*iphoneos*" | head -1)
-for ID in $(xcrun devicectl list devices | awk '/connected/ && /physical/ {print $3}'); do
+for ID in $(xcrun devicectl list devices | grep -E ' connected .*physical' | grep -oE '[0-9A-F]{8}-[0-9A-F]{16}'); do
   echo "Installing on $ID"
   xcrun devicectl device install app --device "$ID" "$APP" | tail -2
 done

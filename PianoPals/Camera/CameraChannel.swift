@@ -77,7 +77,8 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var lastRemotePublish: TimeInterval = 0
     private var statsWindowStart: TimeInterval = 0
     private var statsFrames = 0
-    private var dumpedFrame = false
+    private var dumpedFrames = 0
+    private var lastDump: TimeInterval = 0
     private var targetFPS = 60.0
     /// Only touched on `outputQueue`.
     private var smoother = HandSmoother()
@@ -274,7 +275,13 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let previewBase = Double(rotationCoordinator?.videoRotationAngleForHorizonLevelPreview ?? 0)
         let captureBase = Double(rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 0)
         let previewAngle = CGFloat(RotationMath.combined(base: previewBase, manual: manualRotation))
-        let captureAngle = CGFloat(RotationMath.combined(base: captureBase, manual: manualRotation))
+        // One angle for what the grown-up sees AND what hand tracking sees. Gravity-based angles are computed separately for
+        // the preview and for capture, and they can disagree by 90° when the phone points straight down (overhead mount):
+        // then the finger dots land rotated off the real hand.
+        let captureAngle = previewAngle
+        #if DEBUG
+        CameraChannel.log.info("orientation preview=\(previewBase, privacy: .public) capture=\(captureBase, privacy: .public) manual=\(self.manualRotation, privacy: .public) applied=\(Double(previewAngle), privacy: .public) mirrored=\(mirrored, privacy: .public)")
+        #endif
 
         for layer in previewLayers.allObjects {
             guard let connection = layer.connection else { continue }
@@ -342,11 +349,27 @@ final class CameraChannel: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             statsWindowStart = timestamp
             statsFrames = 0
         }
-        if !dumpedFrame, UserDefaults.standard.bool(forKey: "debugDumpFrame"), timestamp - statsWindowStart > 1, let jpeg = PreviewEncoder().jpeg(from: pixelBuffer) {
-            dumpedFrame = true
-            let url = URL.documentsDirectory.appending(path: "frame-\(id.rawValue).jpg")
-            try? jpeg.data.write(to: url)
-            CameraChannel.log.info("[\(self.id.rawValue, privacy: .public)] saved debug frame \(jpeg.width)x\(jpeg.height) to \(url.lastPathComponent, privacy: .public)")
+        // Debug builds (turn off with `-debugDumpFrame NO`): up to 8 frames, 3 s apart, only while a hand is in view. Each is saved full size with the joints
+        // Vision reported, so a real device's tracking can be replayed offline.
+        if dumpedFrames < 8, UserDefaults.standard.object(forKey: "debugDumpFrame") as? String != "NO", timestamp - lastDump > 3,
+           let frame = latestFrame, !frame.hands.isEmpty {
+            let encoder = PreviewEncoder()
+            encoder.targetWidth = 4_000
+            encoder.quality = 0.9
+            guard let jpeg = encoder.jpeg(from: pixelBuffer) else { return }
+            lastDump = timestamp
+            dumpedFrames += 1
+            let base = "frame-\(id.rawValue)-\(dumpedFrames)"
+            try? jpeg.data.write(to: URL.documentsDirectory.appending(path: base + ".jpg"))
+            var text = "image \(jpeg.width)x\(jpeg.height) imageSize \(frame.imageSize.width)x\(frame.imageSize.height)\n"
+            for hand in frame.hands {
+                text += "hand \(hand.id) side \(hand.side.map { $0.rawValue } ?? "?")\n"
+                for (joint, point) in hand.joints.sorted(by: { "\($0.key)" < "\($1.key)" }) {
+                    text += "  \(joint) \(point.point.x) \(point.point.y) \(point.confidence)\n"
+                }
+            }
+            try? text.write(to: URL.documentsDirectory.appending(path: base + ".txt"), atomically: true, encoding: .utf8)
+            CameraChannel.log.info("[\(self.id.rawValue, privacy: .public)] saved debug frame \(base, privacy: .public) \(jpeg.width)x\(jpeg.height)")
         }
     }
     #endif
