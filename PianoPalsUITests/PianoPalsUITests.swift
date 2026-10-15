@@ -9,7 +9,7 @@ final class PianoPalsUITests: XCTestCase {
 
     private func launch(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO"] + extra
+        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO", "-voicePrompts", "NO"] + extra
         app.launch()
         return app
     }
@@ -103,7 +103,7 @@ final class PianoPalsAIFlowUITests: XCTestCase {
 
     private func launch(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO"] + extra
+        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO", "-voicePrompts", "NO"] + extra
         app.launch()
         return app
     }
@@ -191,7 +191,7 @@ final class PianoPalsAIFlowUITests: XCTestCase {
         gate.press(forDuration: 2.0)
         XCTAssertTrue(app.navigationBars["Grown-ups"].waitForExistence(timeout: 5))
         var found = false
-        for _ in 0..<10 where !found {
+        for _ in 0..<25 where !found {
             found = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Five Finger Walk'")).firstMatch.exists
             if !found { app.swipeUp() }
         }
@@ -205,7 +205,7 @@ final class PianoPalsPracticeUITests: XCTestCase {
 
     private func launch(_ extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO"] + extra
+        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO", "-voicePrompts", "NO"] + extra
         app.launch()
         return app
     }
@@ -245,7 +245,7 @@ final class PianoPalsLayoutUITests: XCTestCase {
     func testCameraSitsAboveTheLessonAndTheKeyboardSpansTheScreen() {
         XCUIDevice.shared.orientation = .landscapeLeft   // the simulator can be left rotated by an earlier run
         let app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO", "-debugScreen", "lesson",
+        app.launchArguments = ["-AppleLanguages", "(en)", "-narration", "NO", "-onScreenSound", "NO", "-voicePrompts", "NO", "-debugScreen", "lesson",
                                "-debugSong", "five finger", "-demoHands", "YES"]
         app.launch()
         let window = app.windows.firstMatch

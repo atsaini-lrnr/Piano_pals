@@ -123,9 +123,9 @@ final class MIDIManager: ObservableObject {
     // MARK: Events
 
     /// Feeds an on-screen key press through exactly the same path as a hardware key.
-    func injectOnScreen(note: UInt8, isOn: Bool, velocity: UInt8 = 80) {
+    func injectOnScreen(note: UInt8, isOn: Bool, velocity: UInt8 = 80, origin: MIDINoteEvent.Origin = .onScreen) {
         let event = MIDINoteEvent(note: note, velocity: isOn ? velocity : 0, isOn: isOn, channel: 0,
-                                  timestamp: HostClock.now, origin: .onScreen)
+                                  timestamp: HostClock.now, origin: origin)
         deliver([event])
     }
 

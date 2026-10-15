@@ -54,6 +54,8 @@ final class AppSettings: ObservableObject {
     @Published var tempoScale: Double { didSet { defaults.set(tempoScale, forKey: "tempoScale") } }
     @Published var narrationEnabled: Bool { didSet { defaults.set(narrationEnabled, forKey: "narration") } }
     @Published var onScreenSound: Bool { didSet { defaults.set(onScreenSound, forKey: "onScreenSound") } }
+    @Published var voicePrompts: Bool { didSet { defaults.set(voicePrompts, forKey: "voicePrompts") } }
+    @Published var autoAlignOverlay: Bool { didSet { defaults.set(autoAlignOverlay, forKey: "autoAlignOverlay") } }
     @Published var redoOnWrongFinger: Bool { didSet { defaults.set(redoOnWrongFinger, forKey: "redoOnWrongFinger") } }
     @Published var hardwareSound: Bool { didSet { defaults.set(hardwareSound, forKey: "hardwareSound") } }
     @Published var mirrorSmile: Bool { didSet { defaults.set(mirrorSmile, forKey: "mirrorSmile") } }
@@ -79,6 +81,8 @@ final class AppSettings: ObservableObject {
         onScreenSound = defaults.object(forKey: "onScreenSound") as? Bool ?? true
         // On by default: a MIDI controller (like the Impact LX61+) has no speakers, so without this the real keys are silent.
         hardwareSound = defaults.object(forKey: "hardwareSound") as? Bool ?? true
+        voicePrompts = defaults.object(forKey: "voicePrompts") == nil ? true : defaults.bool(forKey: "voicePrompts")   // also reads "-voicePrompts NO"
+        autoAlignOverlay = defaults.object(forKey: "autoAlignOverlay") as? Bool ?? true
         redoOnWrongFinger = defaults.object(forKey: "redoOnWrongFinger") as? Bool ?? true
         mirrorSmile = defaults.object(forKey: "mirrorSmile") as? Bool ?? true
         demoHands = defaults.bool(forKey: "demoHands")

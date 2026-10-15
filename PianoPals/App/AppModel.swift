@@ -45,6 +45,7 @@ final class AppModel: ObservableObject {
     }
     @Published private(set) var songSearch = SongSearchState()
     var songSearcher = SongSearcher()
+    private var aligners: [CameraChannelID: RegionAutoAligner] = [:]
     /// 0…1 while a recording is being turned into notes; nil otherwise.
     @Published private(set) var transcribing: Double?
     var onlineSearch: OnlineMelodySearching = OnlineMelodySearch()
@@ -101,6 +102,9 @@ final class AppModel: ObservableObject {
     let confetti = ConfettiModel()
     let synth = ToneSynth()
     let narrator = Narrator()
+    /// The "You did it" question asked out loud (see `FinishPrompt`).
+    let finishPrompt = FinishPrompt()
+    lazy var voice: VoiceIO = SpeechVoiceIO(narrator: narrator) { [weak self] in self?.synth.restoreSession() }
     let history = HandFrameHistory()
     /// Key press → app reaction, in milliseconds (shown in Grown-ups ▸ Diagnostics).
     let latency = LatencyMeter()
@@ -225,31 +229,61 @@ final class AppModel: ObservableObject {
     func saveCalibration(_ region: KeyboardRegion, for channel: CameraChannelID) {
         calibrationStore.save(region, channel: channel)
         regions[channel] = region
+        aligners[channel] = nil
     }
 
     func resetCalibration(for channel: CameraChannelID) {
         calibrationStore.clear(channel: channel)
         regions[channel] = nil
+        aligners[channel] = nil
+    }
+
+    /// While the child plays, nudges the region so the overlay stays on the key being struck even if the camera has moved.
+    /// Kept in memory only: a fresh calibration (or a restart) starts from the saved one.
+    private func autoAlign(note: Int, frames: [HandFrame], channel: CameraChannelID) {
+        guard !settings.demoHands else { return }
+        let current = region(for: channel)
+        guard current.isCalibrated else { return }
+        var aligner = aligners[channel] ?? RegionAutoAligner(baseline: current)
+        if let corrected = aligner.ingest(note: note, frames: frames, region: current) { regions[channel] = corrected }
+        aligners[channel] = aligner
     }
 
     // MARK: Lessons
 
     func open(_ lesson: Lesson, returnTo: Screen = .songs) {
+        finishPrompt.cancel()
         session.load(lesson)
         lessonReturnScreen = returnTo
         spanFollower = SpanFollower(windowKeys: 15, limit: keyboardRange)
         updateVisibleSpan()
         screen = .lesson
-        narrator.say("Let's play \(lesson.title)! Press the green button to start.")
+        narrator.say("Let's play \(lesson.title)! Press the green button, or any key on the piano, to start.")
     }
 
     func startLesson() {
+        finishPrompt.cancel()
         avatar.react(to: .started)
         session.start()
         narrator.say("Follow the shapes!")
     }
 
+    /// What happens after the "You did it" question: play the song again, or on to the next song (or the next practice step).
+    func handleFinishAnswer(_ answer: VoiceAnswer) {
+        switch answer {
+        case .again: startLesson()
+        case .next: if routine != nil { advanceRoutine() } else { playNextSong() }
+        }
+    }
+
+    /// The song after the current one in the list (wrapping round), ready for the child to start with a key.
+    func playNextSong() {
+        guard let current = session.lesson, let index = songs.firstIndex(where: { $0.id == current.id }), !songs.isEmpty else { leaveLesson(); return }
+        open(songs[(index + 1) % songs.count], returnTo: lessonReturnScreen)
+    }
+
     func leaveLesson() {
+        finishPrompt.cancel()
         coachClock?.cancel()
         session.stop()
         narrator.stop()
@@ -444,6 +478,10 @@ final class AppModel: ObservableObject {
             synth.play(note: Int(event.note), velocity: Int(event.velocity))
         }
 
+        // The iPad can be out of a child's reach, so the real keyboard works as the remote control. These presses are not notes.
+        if hardware, finishPrompt.isActive { finishPrompt.keyPressed(); return }       // "You did it": any key = play again
+        if hardware, screen == .lesson, session.phase == .ready { startLesson(); return }   // any key = the green Play button
+
         var detected: DetectedFinger?
         if session.phase == .playing {
             let channel = cameras.trackingChannel
@@ -456,6 +494,7 @@ final class AppModel: ObservableObject {
                 // Vote over ~150 ms of frames around the strike so one jittery frame can't decide.
                 let frames = history.frames(from: event.timestamp - 0.10, to: event.timestamp + 0.05, channel: channel)
                 detected = FingerAttributor().attribute(note: Int(event.note), frames: frames, region: region(for: channel))
+                if settings.autoAlignOverlay { autoAlign(note: Int(event.note), frames: frames, channel: channel) }
             }
         }
         let wasPlaying = session.phase == .playing
@@ -521,6 +560,9 @@ final class AppModel: ObservableObject {
             coachClock?.cancel()
             actions += coach.reactToFinish(stars: stars, stats: analyzer.stats)
             recordSession(stars: stars)
+            if settings.voicePrompts, screen == .lesson {
+                finishPrompt.start(io: voice) { [weak self] answer in self?.handleFinishAnswer(answer) }
+            }
         }
         perform(actions)
     }

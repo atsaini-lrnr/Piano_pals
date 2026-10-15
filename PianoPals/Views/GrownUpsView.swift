@@ -143,6 +143,8 @@ private struct GrownUpsContent: View {
             }
             Button("Choose cameras (including your iPhone)…") { app.showCameraPicker = true }
             Toggle("Wrong finger: pause and play the last 2 seconds again", isOn: $settings.redoOnWrongFinger)
+            Toggle("\"You did it\" screen asks by voice: again or a new song", isOn: $settings.voicePrompts)
+            Toggle("Keep the key overlay lined up while playing", isOn: $settings.autoAlignOverlay)
             Toggle("Line up the camera with the keys", isOn: $settings.alignedCamera)
             Toggle("Show the camera picture (off = just keys and fingers)", isOn: $settings.showFootage)
             Toggle("Also show the iPad's front camera", isOn: $settings.showSideView)

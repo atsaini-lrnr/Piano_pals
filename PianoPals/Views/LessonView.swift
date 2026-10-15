@@ -106,18 +106,24 @@ private struct LessonContent: View {
         }
     }
 
-    /// The whole camera picture as the camera sees it (nothing cropped or zoomed), iPhone first. Used until the keyboard is
-    /// calibrated, or with no overhead view. The hand dots sit on the fingers exactly as on the phone.
+    /// The camera picture fills the full width, edge to edge, iPhone first. If the picture is taller than the band it is cropped, keeping
+    /// the lower part where the keys and hands are. Used until the keyboard is calibrated, or with no overhead view.
     private func unalignedBand(size: CGSize, showHint: Bool) -> some View {
         let id = cameras.trackingChannel
         let channel = cameras.channel(id)
+        let tileHeight = size.width / CameraTile.aspect(of: channel)
+        let overflow = max(0, tileHeight - size.height)
+        let lift = min(max((0.5 - 0.65) * tileHeight, -overflow / 2), overflow / 2)   // open on the lower 65 % of the picture
         return ZStack(alignment: .top) {
             CameraTile(channel: channel, title: id == .primary ? "Side view" : "Top view", highlight: session.targets.first?.note.finger,
                        isTracking: true, demoBackdrop: settings.demoHands && id == .primary && channel.state != .running,
                        coaching: model.coachingContext(for: id),
                        placeholderButton: id == .overhead && channel.state != .running && cameras.authorization == .authorized
                            ? ("Use my iPhone", { app.showCameraPicker = true }) : nil)
+                .frame(width: size.width, height: tileHeight)
+                .offset(y: lift)
                 .frame(width: size.width, height: size.height)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             HStack(alignment: .top, spacing: 8) {
                 AvatarView(mood: avatar.mood, childSmile: avatar.childSmile, lookAt: avatar.lookAt).frame(width: 120, height: 130)
                 coachBubble
@@ -225,6 +231,7 @@ private struct LessonContent: View {
                         Text("Ready?").font(.kid(46)).foregroundStyle(.white)
                         BigButton(title: "Play!", systemImage: "play.fill", color: Palette.play, height: 128, fontSize: 52) { app.startLesson() }
                             .frame(width: 340)
+                        Text("or press any key on the piano").font(.kid(22, weight: .bold)).foregroundStyle(.white.opacity(0.9))
                     }
                 } else if session.phase == .paused {
                     Text("Resting…").font(.kid(46)).foregroundStyle(.white)
@@ -277,11 +284,28 @@ private struct LessonContent: View {
                     }
                 }
                 .frame(width: 720)
+                FinishPromptLine(prompt: model.finishPrompt)
             }
             .padding(40)
             .background(RoundedRectangle(cornerRadius: 48, style: .continuous).fill(.white))
             .shadow(radius: 20)
         }
         .transition(.scale.combined(with: .opacity))
+    }
+}
+
+/// The question the panda is asking out loud on the "You did it" card, in words, for a child who does not speak yet.
+private struct FinishPromptLine: View {
+    @ObservedObject var prompt: FinishPrompt
+
+    var body: some View {
+        if let text = prompt.text {
+            VStack(spacing: 6) {
+                Text(text).font(.kid(26, weight: .bold)).foregroundStyle(Palette.ink).multilineTextAlignment(.center)
+                if case .listening = prompt.phase { Label("Listening…", systemImage: "waveform").font(.kid(20)).foregroundStyle(Palette.blueButton) }
+            }
+            .frame(maxWidth: 720)
+            .accessibilityIdentifier("finishPromptLine")
+        }
     }
 }
