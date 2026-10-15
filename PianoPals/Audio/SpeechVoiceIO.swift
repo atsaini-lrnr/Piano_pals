@@ -1,6 +1,6 @@
 import AVFoundation
 import Foundation
-import Speech
+@preconcurrency import Speech
 
 /// Speaks with the narrator's voice and listens with on-device speech recognition. No audio leaves the iPad: if the iPad cannot recognise
 /// speech on the device, or permission is refused, `listen` just waits out the time (a key on the real keyboard can still answer).
