@@ -388,3 +388,25 @@ final class SpanFollowerTests: XCTestCase {
         XCTAssertEqual(follower.update(lessonRange: 48...84, upcoming: []), a)
     }
 }
+
+final class SpanFollowerNextNoteTests: XCTestCase {
+    func testTheNextNoteIsAlwaysOnScreenEvenWhenTheNotesAfterItAreFarAway() {
+        var follower = SpanFollower(windowKeys: 15, limit: 36...96)
+        // A noisy recording: a note near middle C followed by stray notes two octaves higher.
+        let span = follower.update(lessonRange: 40...94, upcoming: [60, 62, 90, 91])
+        XCTAssertTrue(span.contains(60), "the next key must be visible: \(PianoKeys.name(span.lowNote))…\(PianoKeys.name(span.highNote))")
+    }
+
+    func testForAnyMixOfUpcomingNotesTheFirstOneIsInTheWindow() {
+        var follower = SpanFollower(windowKeys: 15, limit: 36...96)
+        var generator = SeededGenerator(seed: 7)
+        for _ in 0..<400 {
+            let upcoming = (0..<4).map { _ in Int.random(in: 38...94, using: &generator) }
+            let span = follower.update(lessonRange: 38...94, upcoming: upcoming)
+            XCTAssertTrue(span.contains(upcoming[0]), "next \(upcoming[0]) in \(span.lowNote)…\(span.highNote) for \(upcoming)")
+            XCTAssertEqual(span.whiteKeyCount, 15)
+            XCTAssertGreaterThanOrEqual(span.lowNote, 36)
+            XCTAssertLessThanOrEqual(span.highNote, 96)
+        }
+    }
+}

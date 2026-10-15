@@ -491,6 +491,9 @@ final class AppModel: ObservableObject {
     /// the one-note-at-a-time tracker is the fallback.
     func addHeardLessons(samples: [Float], fallback notes: [RawNote]) async -> [Lesson] {
         let title = "Heard tune " + Date().formatted(date: .omitted, time: .shortened)
+        #if DEBUG
+        saveHeardAudio(samples, notes: notes)   // so a real recording can be replayed offline (debug builds only, never in a release)
+        #endif
         if samples.count > Int(BasicPitch.sampleRate) {
             let result = try? await Task.detached(priority: .userInitiated) { try RecordingTranscriber().transcribe(samples: samples, title: title) }.value
             if let result {
@@ -501,6 +504,19 @@ final class AppModel: ObservableObject {
         }
         return addListenedLesson(from: notes).map { [$0] } ?? []
     }
+
+    #if DEBUG
+    private func saveHeardAudio(_ samples: [Float], notes: [RawNote]) {
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: BasicPitch.sampleRate, channels: 1, interleaved: false),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)), let channel = buffer.floatChannelData?[0] else { return }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { channel.update(from: $0.baseAddress!, count: samples.count) }
+        if let file = try? AVAudioFile(forWriting: URL.documentsDirectory.appending(path: "last-listen.wav"), settings: format.settings) { try? file.write(from: buffer) }
+        let peak = samples.map { abs($0) }.max() ?? 0
+        let text = "samples \(samples.count) peak \(peak)\n" + notes.map { "yin \($0.pitch) \($0.start) \($0.duration)" }.joined(separator: "\n")
+        try? text.write(to: URL.documentsDirectory.appending(path: "last-listen.txt"), atomically: true, encoding: .utf8)
+    }
+    #endif
 
     /// Turns what was played on the real keyboard into a lesson (both hands when both were used).
     func addRecordedLesson(from raw: [RawNote]) -> Lesson? {

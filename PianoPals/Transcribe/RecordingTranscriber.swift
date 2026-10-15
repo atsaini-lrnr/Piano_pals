@@ -39,6 +39,8 @@ enum RecordingLessons {
 struct RecordingTranscriber {
     var model: BasicPitchModel?
     var decoder = BasicPitchDecoder()
+    /// Notes fainter than this (0…1) are dropped. Real notes from the model come out around 0.6 to 0.8.
+    static let minimumStrength: Float = 0.45
 
     init(model: BasicPitchModel? = BasicPitchModel()) { self.model = model }
 
@@ -76,7 +78,8 @@ struct RecordingTranscriber {
         let note = BasicPitch.stitch(notes, sampleCount: samples.count)
         let onset = BasicPitch.stitch(onsets, sampleCount: samples.count)
         let decoded = decoder.decode(note: note.grid, onset: onset.grid, frames: min(note.frames, onset.frames))
-        return BasicPitchDecoder.suppressingHarmonics(decoded).map(\.raw)
+        // Faint notes are room noise, speaker hum and overtones: a lesson built from them has keys nobody played.
+        return BasicPitchDecoder.suppressingHarmonics(decoded).filter { $0.strength >= Self.minimumStrength }.map(\.raw)
     }
 
     /// Single-voice fallback: the same YIN tracker and segmenter that Listen mode uses.

@@ -48,6 +48,9 @@ struct SpanFollower: Equatable, Sendable {
         }
         var start = octaveStart(low - 2)
         if high > start + windowKeys - 2 { start += 7 }
+        // The very next note must always be on screen, even when the notes after it are far away (a noisy recording, a big leap).
+        let next = soon[0]
+        if next < start + 1 || next > start + windowKeys - 2 { start = octaveStart(next - 2) }
         startWhite = clamp(start)
         return span!
     }

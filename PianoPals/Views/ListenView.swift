@@ -51,17 +51,17 @@ struct ListenView: View {
 
                 Divider().padding(.horizontal, 40)
                 VStack(spacing: 8) {
-                    Text("Or play it on your keyboard").font(.headline)
+                    Text("Save a tune you can already play").font(.headline)
                     if keys.isRecording {
                         Button { stopKeys() } label: {
                             Label("Stop (\(keys.keyCount) keys so far)", systemImage: "stop.fill").font(.title3.weight(.semibold)).padding(.horizontal, 20).padding(.vertical, 6)
                         }.buttonStyle(.borderedProminent).tint(.red)
                     } else {
                         Button { message = nil; addedLesson = nil; keys.start(listeningTo: app.midi) } label: {
-                            Label("Record from my keyboard", systemImage: "pianokeys").font(.title3.weight(.semibold)).padding(.horizontal, 20).padding(.vertical, 6)
+                            Label("Save my playing as a lesson", systemImage: "pianokeys").font(.title3.weight(.semibold)).padding(.horizontal, 20).padding(.vertical, 6)
                         }.buttonStyle(.bordered).disabled(working || recorder.state == .listening)
                     }
-                    Text("Every key is kept exactly, with both hands. No microphone needed.").font(.footnote).foregroundStyle(.secondary)
+                    Text("For a tune you already know: play it once on the keyboard and your child can then practise it with the notes, fingers, slow speed and the camera. Every key is kept exactly, with both hands.").font(.footnote).foregroundStyle(.secondary)
                 }
                 if working { ProgressView("Making your lesson…") }
                 if let message { Label(message, systemImage: "info.circle").foregroundStyle(.orange).multilineTextAlignment(.center) }
@@ -94,7 +94,7 @@ struct ListenView: View {
             if let first = lessons.first {
                 addedLesson = first
             } else {
-                message = "I couldn't hear clear notes. Try again a bit closer to the iPad, with less noise, or use “Record from my keyboard”."
+                message = "I couldn't hear clear notes. Try again a bit closer to the iPad, with less noise, or use “Save my playing as a lesson” if you can play it."
             }
         }
     }
@@ -104,7 +104,7 @@ struct ListenView: View {
         if let lesson = app.addRecordedLesson(from: raw) {
             addedLesson = lesson
         } else {
-            message = "I didn't catch enough keys. Press “Record from my keyboard”, play the song, then press Stop."
+            message = "I didn't catch enough keys. Press “Save my playing as a lesson”, play the tune, then press Stop."
         }
     }
 }
