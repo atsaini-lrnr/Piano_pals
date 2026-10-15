@@ -113,7 +113,7 @@ private struct LessonContent: View {
         let channel = cameras.channel(id)
         let aspect = CameraTile.aspect(of: channel)
         return ZStack(alignment: .top) {
-            PanZoomView(contentSize: CGSize(width: size.width, height: size.width / aspect), container: size) {
+            PanZoomView(contentSize: CGSize(width: size.width, height: size.width / aspect), container: size, anchorY: 0.65) {
                 CameraTile(channel: channel, title: id == .primary ? "Side view" : "Top view", highlight: session.targets.first?.note.finger,
                            isTracking: true, demoBackdrop: settings.demoHands && id == .primary && channel.state != .running,
                            coaching: model.coachingContext(for: id),

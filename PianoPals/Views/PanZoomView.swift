@@ -5,6 +5,8 @@ import SwiftUI
 struct PanZoomView<Content: View>: View {
     let contentSize: CGSize
     let container: CGSize
+    /// Where in the picture the container starts, top (0) to bottom (1). Overhead keyboard shots keep the keys and hands low.
+    var anchorY: CGFloat = 0.5
     @ViewBuilder var content: () -> Content
 
     @State private var scale: CGFloat = 0
@@ -24,22 +26,33 @@ struct PanZoomView<Content: View>: View {
         return CGSize(width: min(max(value.width, -limitX), limitX), height: min(max(value.height, -limitY), limitY))
     }
 
+    /// Pushes the picture up so the container opens on `anchorY` instead of the middle.
+    private func base(_ scale: CGFloat) -> CGFloat { -(anchorY - 0.5) * contentSize.height * scale }
+
+    private func shown(_ pan: CGSize, scale: CGFloat) -> CGSize { clamped(CGSize(width: pan.width, height: pan.height + base(scale)), scale: scale) }
+
+    /// Keeps a finished drag inside the picture, so the next drag starts from where the picture really is.
+    private func settle(_ pan: CGSize, scale: CGFloat) -> CGSize {
+        let edge = shown(pan, scale: scale)
+        return CGSize(width: edge.width, height: edge.height - base(scale))
+    }
+
     var body: some View {
         let scale = current
         content()
             .frame(width: contentSize.width, height: contentSize.height)
             .scaleEffect(scale)
-            .offset(clamped(offset, scale: scale))
+            .offset(shown(offset, scale: scale))
             .frame(width: container.width, height: container.height)
             .clipped()
             .contentShape(Rectangle())
             .gesture(
                 DragGesture()
-                    .onChanged { offset = clamped(CGSize(width: committedOffset.width + $0.translation.width, height: committedOffset.height + $0.translation.height), scale: scale) }
-                    .onEnded { _ in committedOffset = offset }
+                    .onChanged { offset = CGSize(width: committedOffset.width + $0.translation.width, height: committedOffset.height + $0.translation.height) }
+                    .onEnded { _ in offset = settle(offset, scale: scale); committedOffset = offset }
                     .simultaneously(with: MagnifyGesture()
                         .onChanged { self.scale = min(max((committedScale == 0 ? minScale : committedScale) * $0.magnification, minScale), minScale * Self.maxZoom) }
-                        .onEnded { _ in committedScale = self.scale; offset = clamped(offset, scale: self.scale); committedOffset = offset })
+                        .onEnded { _ in committedScale = self.scale; offset = settle(offset, scale: self.scale); committedOffset = offset })
             )
             .onTapGesture(count: 2) { withAnimation(.easeOut(duration: 0.2)) { self.scale = 0; committedScale = 0; offset = .zero; committedOffset = .zero } }
             .accessibilityHint("Pinch to zoom, drag to move, double tap to reset")
