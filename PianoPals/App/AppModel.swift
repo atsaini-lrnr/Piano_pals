@@ -38,6 +38,10 @@ final class AppModel: ObservableObject {
     /// The grown-up's browser-like song search: what is being looked up, step by step, and the song they picked.
     struct SongSearchState: Equatable {
         var query = ""
+        /// The words actually looked up (a pasted link is turned into the song's title first).
+        var searched = ""
+        /// "From your link: ..." when the words came from a YouTube or music link.
+        var note: String?
         var running = false
         var results: SongSearchResults?
         var chosen: CatalogSong?
@@ -259,10 +263,26 @@ final class AppModel: ObservableObject {
         updateVisibleSpan()
         screen = .lesson
         narrator.say("Let's play \(lesson.title)! Press the green button, or any key on the piano, to start.")
+        startReadyReminders()
+    }
+
+    private var readyReminder: Task<Void, Never>?
+
+    /// A child out of reach of the iPad needs to hear what to do: if nothing starts the song, say so again a few times.
+    private func startReadyReminders() {
+        readyReminder?.cancel()
+        readyReminder = Task { @MainActor [weak self] in
+            for wait in [10.0, 15.0, 25.0] {
+                try? await Task.sleep(for: .seconds(wait))
+                guard let self, !Task.isCancelled, self.screen == .lesson, self.session.phase == .ready else { return }
+                await self.narrator.sayAndWait("Press any key on the piano to start!")
+            }
+        }
     }
 
     func startLesson() {
         finishPrompt.cancel()
+        readyReminder?.cancel()
         avatar.react(to: .started)
         session.start()
         narrator.say("Follow the shapes!")
@@ -284,6 +304,7 @@ final class AppModel: ObservableObject {
 
     func leaveLesson() {
         finishPrompt.cancel()
+        readyReminder?.cancel()
         coachClock?.cancel()
         session.stop()
         narrator.stop()
@@ -375,8 +396,20 @@ final class AppModel: ObservableObject {
     func searchSongs(_ query: String) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !songSearch.running else { return }
-        songSearch = SongSearchState(query: trimmed, running: true, results: SongSearchResults(steps: Dictionary(uniqueKeysWithValues: SearchStep.allCases.map { ($0, StepState.waiting) })))
-        let results = await songSearcher.search(trimmed, songs: songs) { step, state in
+        songSearch = SongSearchState(query: trimmed, searched: trimmed, running: true, results: SongSearchResults(steps: Dictionary(uniqueKeysWithValues: SearchStep.allCases.map { ($0, StepState.waiting) })))
+        var words = trimmed
+        switch await songSearcher.resolve(trimmed) {
+        case .words(let found, let from):
+            words = found
+            songSearch.searched = found
+            songSearch.note = from.map { "From your link: “\($0)”" }
+        case .unreadable:
+            songSearch.note = "I couldn't read that link. Is the iPad online? You can type the song's name instead."
+            songSearch.results = SongSearchResults()
+            songSearch.running = false
+            return
+        }
+        let results = await songSearcher.search(words, songs: songs) { step, state in
             Task { @MainActor in self.songSearch.results?.steps[step] = state }
         }
         songSearch.results = results
@@ -454,6 +487,30 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Turns what the microphone heard into lessons. The note-finding model gets the sound first (any speed, chords and a left hand too);
+    /// the one-note-at-a-time tracker is the fallback.
+    func addHeardLessons(samples: [Float], fallback notes: [RawNote]) async -> [Lesson] {
+        let title = "Heard tune " + Date().formatted(date: .omitted, time: .shortened)
+        if samples.count > Int(BasicPitch.sampleRate) {
+            let result = try? await Task.detached(priority: .userInitiated) { try RecordingTranscriber().transcribe(samples: samples, title: title) }.value
+            if let result {
+                for lesson in result.lessons.reversed() { add(lesson) }
+                generation = .added(message: "Added “\(title)” from what I heard.", lesson: result.lessons[0])
+                return result.lessons
+            }
+        }
+        return addListenedLesson(from: notes).map { [$0] } ?? []
+    }
+
+    /// Turns what was played on the real keyboard into a lesson (both hands when both were used).
+    func addRecordedLesson(from raw: [RawNote]) -> Lesson? {
+        let title = "My playing " + Date().formatted(date: .omitted, time: .shortened)
+        guard let lesson = MIDIRecording.lesson(from: raw, title: title) else { return nil }
+        add(lesson)
+        generation = .added(message: "Added “\(lesson.title)” from your keyboard.", lesson: lesson)
+        return lesson
+    }
+
     /// Turns notes heard through the microphone into a lesson. nil when too few notes were recognised.
     func addListenedLesson(from heard: [RawNote]) -> Lesson? {
         let title = "Heard tune " + Date().formatted(date: .omitted, time: .shortened)
@@ -480,7 +537,7 @@ final class AppModel: ObservableObject {
 
         // The iPad can be out of a child's reach, so the real keyboard works as the remote control. These presses are not notes.
         if hardware, finishPrompt.isActive { finishPrompt.keyPressed(); return }       // "You did it": any key = play again
-        if hardware, screen == .lesson, session.phase == .ready { startLesson(); return }   // any key = the green Play button
+        if screen == .lesson, session.phase == .ready { startLesson(); return }   // any key (real or on screen) = the green Play button
 
         var detected: DetectedFinger?
         if session.phase == .playing {
@@ -604,7 +661,7 @@ final class AppModel: ObservableObject {
     func coachingContext(for channel: CameraChannelID) -> CoachingContext? {
         guard session.phase == .playing || session.phase == .ready || session.phase == .paused || correction != nil else { return nil }
         return CoachingContext(region: region(for: channel), target: session.targets.first?.note, correction: correction,
-                               lessonHand: session.lesson?.hand ?? .right)
+                               lessonHand: session.targets.first?.note.hand ?? session.lesson?.hand ?? .right)
     }
 
     private func show(message: String) {
@@ -684,7 +741,7 @@ final class AppModel: ObservableObject {
             var finger = target.note.finger
             if settings.demoWrongFinger { finger = Finger(rawValue: finger.number % 5 + 1) ?? .index }
             frame = DemoHandSource.playingFrame(channel: .primary, note: target.note.noteNumber, finger: finger,
-                                                side: session.lesson?.hand ?? .right, region: region, time: now)
+                                                side: target.note.hand ?? session.lesson?.hand ?? .right, region: region, time: now)
         } else {
             frame = DemoHandSource.playingFrame(channel: .primary, note: 60, finger: .thumb, side: .right, region: region, time: now)
         }

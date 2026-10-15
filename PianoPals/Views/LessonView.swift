@@ -170,7 +170,12 @@ private struct LessonContent: View {
                 VStack(spacing: 2) {
                     Text("Use").font(.kid(18, weight: .bold)).foregroundStyle(Palette.ink)
                     HStack(spacing: -6) {
-                        ForEach(session.targets.prefix(3)) { FingerBadge(finger: $0.note.finger, size: 60) }
+                        ForEach(session.targets.prefix(3)) { target in
+                            VStack(spacing: 0) {
+                                FingerBadge(finger: target.note.finger, size: 60)
+                                if session.lesson?.isBothHands == true, let hand = target.note.hand { HandBadge(hand: hand, size: 24) }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 6)

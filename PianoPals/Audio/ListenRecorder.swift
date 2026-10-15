@@ -28,10 +28,14 @@ final class ListenRecorder: ObservableObject {
         var segmenter: NoteSegmenter
         var accumulator: [Float] = []
         var processedSamples = 0
+        /// The same sound at 22.05 kHz (what the note-finding model wants), kept in memory for up to a minute. Never written to disk.
+        var resampler: StreamResampler
+        var captured: [Float] = []
         let hop: Int
         var lastPublish: TimeInterval = 0
 
         init(sampleRate: Double) {
+            resampler = StreamResampler(inputRate: sampleRate, outputRate: BasicPitch.sampleRate)
             detector = YINPitchDetector(sampleRate: sampleRate, frameSize: 2_048)
             hop = 1_024
             segmenter = NoteSegmenter(frameDuration: Double(1_024) / sampleRate)
@@ -89,16 +93,19 @@ final class ListenRecorder: ObservableObject {
     }
 
     /// Stops listening and returns the notes heard (raw timing, original octave).
-    func stop() async -> [RawNote] {
-        guard state == .listening else { return [] }
+    func stop() async -> [RawNote] { await stopWithAudio().notes }
+
+    /// Like `stop()`, and also gives the sound itself (22.05 kHz mono, in memory only) so every note can be found, chords included.
+    func stopWithAudio() async -> (notes: [RawNote], samples: [Float]) {
+        guard state == .listening else { return ([], []) }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        let notes: [RawNote] = await withCheckedContinuation { continuation in
+        let heard: (notes: [RawNote], samples: [Float]) = await withCheckedContinuation { continuation in
             dsp.async { [pipeline] in
-                let result = pipeline.withLock { pipeline -> [RawNote] in
-                    guard let pipeline else { return [] }
+                let result = pipeline.withLock { pipeline -> (notes: [RawNote], samples: [Float]) in
+                    guard let pipeline else { return ([], []) }
                     let end = Double(pipeline.processedSamples) / pipeline.detector.sampleRate
-                    return pipeline.segmenter.finish(endTime: end)
+                    return (pipeline.segmenter.finish(endTime: end), pipeline.captured)
                 }
                 continuation.resume(returning: result)
             }
@@ -108,10 +115,13 @@ final class ListenRecorder: ObservableObject {
         state = .idle
         liveNote = nil
         level = 0
-        return notes
+        return heard
     }
 
     nonisolated private func process(_ samples: [Float], pipeline: Pipeline) {
+        if pipeline.captured.count < Int(BasicPitch.sampleRate) * AudioImporter.maximumSeconds {
+            pipeline.captured.append(contentsOf: pipeline.resampler.process(samples))
+        }
         pipeline.accumulator.append(contentsOf: samples)
         while pipeline.accumulator.count >= pipeline.detector.frameSize {
             let frame = Array(pipeline.accumulator.prefix(pipeline.detector.frameSize))

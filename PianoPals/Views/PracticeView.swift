@@ -92,13 +92,13 @@ private struct PracticeContent: View {
                             HStack(spacing: 4) {
                                 Text("\(index + 1)").font(.kid(16)).foregroundStyle(.white)
                                     .frame(width: 26, height: 26).background(Circle().fill(Palette.blueButton))
-                                HandBadge(hand: step.lesson.hand)
+                                handBadges(for: step.lesson, size: 26)
                             }
                         }
                         .frame(width: 140, height: 140)
                         .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Palette.sunny.opacity(0.35)))
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Step \(index + 1): \(step.title), \(step.lesson.hand.displayName) hand")
+                        .accessibilityLabel("Step \(index + 1): \(step.title), \(step.lesson.isBothHands ? "both hands" : step.lesson.hand.displayName + " hand")")
                     }
                 }
             }
@@ -120,7 +120,7 @@ private struct ExerciseCard: View {
             HStack {
                 Text(exercise.emoji).font(.system(size: 40))
                 Spacer()
-                HandBadge(hand: exercise.hand, size: 34)
+                if exercise.bothHands { HStack(spacing: 4) { HandBadge(hand: .left, size: 34); HandBadge(hand: .right, size: 34) } } else { HandBadge(hand: exercise.hand, size: 34) }
             }
             Text(exercise.title).font(.kid(26)).foregroundStyle(Palette.ink).lineLimit(2).minimumScaleFactor(0.7)
             Text(exercise.subtitle).font(.kid(16, weight: .semibold)).foregroundStyle(Palette.ink.opacity(0.6)).lineLimit(2)
@@ -146,5 +146,15 @@ struct HandBadge: View {
             .frame(width: size, height: size)
             .background(Circle().fill(hand == .right ? Palette.blueButton : Palette.pink))
             .accessibilityLabel("\(hand.displayName) hand")
+    }
+}
+
+/// "L" and "R" together for a lesson played with both hands, a single badge otherwise.
+@ViewBuilder
+private func handBadges(for lesson: Lesson, size: CGFloat) -> some View {
+    if lesson.isBothHands {
+        HStack(spacing: 2) { HandBadge(hand: .left, size: size); HandBadge(hand: .right, size: size) }
+    } else {
+        HandBadge(hand: lesson.hand, size: size)
     }
 }

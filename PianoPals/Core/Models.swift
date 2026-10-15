@@ -54,11 +54,14 @@ struct Note: Codable, Equatable, Hashable, Sendable {
     var noteNumber: Int
     /// 1 (thumb) … 5 (pinky).
     var assignedFinger: Int
+    /// Which hand plays this note in a lesson for both hands. nil: the lesson's own hand.
+    var hand: HandSide?
 
     var finger: Finger { Finger(rawValue: assignedFinger) ?? .index }
     var endTime: TimeInterval { timestamp + duration }
 
-    init(timestamp: TimeInterval, duration: TimeInterval, noteNumber: Int, assignedFinger: Int) {
+    init(timestamp: TimeInterval, duration: TimeInterval, noteNumber: Int, assignedFinger: Int, hand: HandSide? = nil) {
+        self.hand = hand
         self.timestamp = timestamp
         self.duration = duration
         self.noteNumber = noteNumber
@@ -83,7 +86,8 @@ struct Note: Codable, Equatable, Hashable, Sendable {
         guard (1...5).contains(assignedFinger) else {
             throw DecodingError.dataCorruptedError(forKey: .assignedFinger, in: c, debugDescription: "assignedFinger must be 1…5")
         }
-        self.init(timestamp: timestamp, duration: duration, noteNumber: noteNumber, assignedFinger: assignedFinger)
+        self.init(timestamp: timestamp, duration: duration, noteNumber: noteNumber, assignedFinger: assignedFinger,
+                  hand: try c.decodeIfPresent(HandSide.self, forKey: .hand))
     }
 }
 
@@ -127,6 +131,8 @@ struct Lesson: Identifiable, Equatable, Sendable {
     }
 
     var duration: TimeInterval { notes.map(\.endTime).max() ?? 0 }
+    /// True when the lesson has notes for the left and the right hand together.
+    var isBothHands: Bool { Set(notes.compactMap(\.hand)).count == 2 }
     var lowestNote: Int? { notes.map(\.noteNumber).min() }
     var highestNote: Int? { notes.map(\.noteNumber).max() }
 

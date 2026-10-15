@@ -230,7 +230,7 @@ final class LessonSession: ObservableObject {
         }
 
         let expected = lesson.notes[index]
-        let quality = classify(expected: expected, detected: detected, lessonHand: lesson.hand)
+        let quality = classify(expected: expected, detected: detected, lessonHand: expected.hand ?? lesson.hand)
         consecutiveWrong = 0
         reanchor(at: now, time: time)
         noteProgress[index] = .hit(quality)

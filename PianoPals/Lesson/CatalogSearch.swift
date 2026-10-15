@@ -12,6 +12,19 @@ struct CatalogSong: Identifiable, Equatable, Sendable {
     var artworkURL: URL?
     /// Apple's 30 second sample: for the grown-up to play and confirm the song. It is never analysed.
     var previewURL: URL?
+    /// The song's page in Apple Music / the iTunes Store, where the full song can be heard.
+    var trackViewURL: URL?
+
+    /// Opens a web search for the song on YouTube (a link, nothing is downloaded or analysed by the app).
+    var youTubeSearchURL: URL? { Self.webURL("https://www.youtube.com/results", query: "\(title) \(artist)") }
+    /// Opens a web search for piano chords of the song. Chord sheets are copyrighted and their sites do not allow copying, so the app only links.
+    var chordSearchURL: URL? { Self.webURL("https://duckduckgo.com/", query: "\(title) \(artist) piano chords") }
+
+    private static func webURL(_ base: String, query: String) -> URL? {
+        var components = URLComponents(string: base)
+        components?.queryItems = [URLQueryItem(name: base.contains("youtube") ? "search_query" : "q", value: query)]
+        return components?.url
+    }
 }
 
 enum CatalogParser {
@@ -24,7 +37,8 @@ enum CatalogParser {
             let year = (item["releaseDate"] as? String).flatMap { Int($0.prefix(4)) }
             return CatalogSong(id: id, title: title, artist: artist, album: item["collectionName"] as? String, year: year,
                                artworkURL: (item["artworkUrl100"] as? String).flatMap(URL.init(string:)),
-                               previewURL: (item["previewUrl"] as? String).flatMap(URL.init(string:)))
+                               previewURL: (item["previewUrl"] as? String).flatMap(URL.init(string:)),
+                               trackViewURL: (item["trackViewUrl"] as? String).flatMap(URL.init(string:)))
         }
     }
 
@@ -91,7 +105,27 @@ struct SongSearcher: Sendable {
     var fetcher: HTTPFetching = URLSessionFetcher()
     var online: OnlineMelodySearching = OnlineMelodySearch()
     var library: [LibrarySong] = SongLibrary.all
+    var titleFetcher: VideoTitleFetching = YouTubeOEmbedFetcher()
     var catalogueLimit = 8
+
+    enum Resolved: Equatable, Sendable {
+        case words(String, from: String?)
+        case unreadable
+    }
+
+    /// A pasted YouTube link becomes the video's title (only the title is read), a music-share link its title and artist; anything else is
+    /// searched as typed. `.unreadable` when a YouTube link's title can't be fetched.
+    func resolve(_ text: String) async -> Resolved {
+        switch LessonInputClassifier.classify(text) {
+        case .youTube(let id)?:
+            guard let metadata = try? await titleFetcher.metadata(forVideoID: id) else { return .unreadable }
+            return .words(TitleNormalizer.candidates(from: metadata.title).first ?? metadata.title, from: metadata.title)
+        case .musicShare(let title, let artist, _)?:
+            return .words([title, artist ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces), from: title)
+        default:
+            return .words(text, from: nil)
+        }
+    }
 
     func search(_ query: String, songs: [Lesson], progress: @escaping @Sendable (SearchStep, StepState) -> Void = { _, _ in }) async -> SongSearchResults {
         let words = SongMatcher.tokens(query).joined(separator: " ")

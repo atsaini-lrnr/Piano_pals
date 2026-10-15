@@ -143,7 +143,7 @@ struct MistakeAnalyzer: Sendable {
                 stats.fingerVerified += 1
                 stats.wrongHands += 1
                 finger.errors += 1
-                mistakes.append(Mistake(time: now, kind: .wrongHand(expected: lessonHand, played: played)))
+                mistakes.append(Mistake(time: now, kind: .wrongHand(expected: note.hand ?? lessonHand, played: played)))
             }
             stats.perFinger[note.assignedFinger] = finger
             wrongForCurrentTarget = false

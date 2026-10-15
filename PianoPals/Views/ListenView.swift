@@ -8,11 +8,12 @@ struct ListenView: View {
     @State private var message: String?
     @State private var addedLesson: Lesson?
     @State private var working = false
+    @StateObject private var keys = MIDIRecorder()
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 22) {
-                Text("Play or hum the song slowly, one note at a time, close to the iPad.")
+                Text("Play or sing the song close to the iPad, at any speed. Chords are fine.")
                     .font(.title3).multilineTextAlignment(.center).foregroundStyle(.secondary)
                     .padding(.horizontal)
 
@@ -48,6 +49,20 @@ struct ListenView: View {
                     Label(reason, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                 }
 
+                Divider().padding(.horizontal, 40)
+                VStack(spacing: 8) {
+                    Text("Or play it on your keyboard").font(.headline)
+                    if keys.isRecording {
+                        Button { stopKeys() } label: {
+                            Label("Stop (\(keys.keyCount) keys so far)", systemImage: "stop.fill").font(.title3.weight(.semibold)).padding(.horizontal, 20).padding(.vertical, 6)
+                        }.buttonStyle(.borderedProminent).tint(.red)
+                    } else {
+                        Button { message = nil; addedLesson = nil; keys.start(listeningTo: app.midi) } label: {
+                            Label("Record from my keyboard", systemImage: "pianokeys").font(.title3.weight(.semibold)).padding(.horizontal, 20).padding(.vertical, 6)
+                        }.buttonStyle(.bordered).disabled(working || recorder.state == .listening)
+                    }
+                    Text("Every key is kept exactly, with both hands. No microphone needed.").font(.footnote).foregroundStyle(.secondary)
+                }
                 if working { ProgressView("Making your lesson…") }
                 if let message { Label(message, systemImage: "info.circle").foregroundStyle(.orange).multilineTextAlignment(.center) }
                 if let addedLesson {
@@ -57,7 +72,7 @@ struct ListenView: View {
                     }
                 }
                 Spacer()
-                Text("Works best for simple tunes played or sung one note at a time. Nothing is recorded or sent anywhere.")
+                Text("The sound is analysed on this iPad and thrown away: nothing is saved or sent anywhere.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
             }
             .padding(.top, 20)
@@ -72,14 +87,24 @@ struct ListenView: View {
         working = true
         message = nil
         Task {
-            let heard = await recorder.stop()
+            let heard = await recorder.stopWithAudio()
             app.synth.restoreSession()
+            let lessons = await app.addHeardLessons(samples: heard.samples, fallback: heard.notes)
             working = false
-            if let lesson = app.addListenedLesson(from: heard) {
-                addedLesson = lesson
+            if let first = lessons.first {
+                addedLesson = first
             } else {
-                message = "I couldn't hear enough separate notes. Try again a little slower, one note at a time, and a bit closer."
+                message = "I couldn't hear clear notes. Try again a bit closer to the iPad, with less noise, or use “Record from my keyboard”."
             }
+        }
+    }
+
+    private func stopKeys() {
+        let raw = keys.stop()
+        if let lesson = app.addRecordedLesson(from: raw) {
+            addedLesson = lesson
+        } else {
+            message = "I didn't catch enough keys. Press “Record from my keyboard”, play the song, then press Stop."
         }
     }
 }

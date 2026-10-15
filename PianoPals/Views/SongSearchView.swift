@@ -49,6 +49,7 @@ struct SongSearchView: View {
             ScrollViewReader { proxy in
                 List {
                     searchSection
+                    if let note = state.note { Section { Label(note, systemImage: "link").font(.callout) } }
                     if let results = state.results {
                         // Once a song is picked its options come first and are scrolled into view; the finished steps step aside.
                         if let song = state.chosen { chosenSection(song).id("chosen") } else { stepsSection(results) }
@@ -76,7 +77,7 @@ struct SongSearchView: View {
     private var searchSection: some View {
         Section {
             HStack {
-                TextField("Song name, artist, or a request", text: $text)
+                TextField("Song name, artist, or a YouTube link", text: $text)
                     .focused($focused)
                     .submitLabel(.search)
                     .onSubmit(search)
@@ -100,7 +101,7 @@ struct SongSearchView: View {
     // MARK: Progress
 
     private func stepsSection(_ results: SongSearchResults) -> some View {
-        Section(state.running ? "Looking for “\(state.query)”…" : "Looked for “\(state.query)”") {
+        Section(state.running ? "Looking for “\(state.searched)”…" : "Looked for “\(state.searched)”") {
             ForEach(SearchStep.allCases, id: \.self) { step in
                 HStack {
                     stepIcon(results.steps[step] ?? .waiting)
@@ -213,6 +214,7 @@ struct SongSearchView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
+            listenLinks(for: song)
             Button { importingAudio = true } label: { Label("Use a recording you have…", systemImage: "waveform") }
                 .disabled(app.transcribing != nil)
             Button { listening = true } label: { Label("Play or hum it near the iPad", systemImage: "mic") }
@@ -221,6 +223,14 @@ struct SongSearchView: View {
             Button { preview.stop(); app.chooseCatalogSong(nil) } label: { Label("Pick a different song", systemImage: "arrow.uturn.backward") }
         }
         .accessibilityIdentifier("whatWeCanDo")
+    }
+
+    @ViewBuilder private func listenLinks(for song: CatalogSong) -> some View {
+        if let url = song.trackViewURL { Link(destination: url) { Label("Hear the full song in Apple Music", systemImage: "music.note") } }
+        if let url = song.youTubeSearchURL { Link(destination: url) { Label("Find the full song on YouTube", systemImage: "play.rectangle") } }
+        if let url = song.chordSearchURL { Link(destination: url) { Label("Look up piano chords on the web", systemImage: "pianokeys") } }
+        Text("These open another app or website, only when you tap. They are for listening and reading: Piano Pals cannot turn a streamed song into notes.")
+            .font(.footnote).foregroundStyle(.secondary)
     }
 
     @ViewBuilder private var progress: some View {

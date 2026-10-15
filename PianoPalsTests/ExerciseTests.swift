@@ -10,11 +10,12 @@ final class ExerciseLibraryTests: XCTestCase {
     func testLibraryIsLargeAndEveryCategoryHasBothHands() {
         XCTAssertGreaterThanOrEqual(ExerciseLibrary.all.count, 40)
         XCTAssertEqual(Set(ExerciseLibrary.all.map(\.id)).count, ExerciseLibrary.all.count, "unique ids")
-        for category in ExerciseCategory.allCases {
+        for category in ExerciseCategory.allCases where category != .bothHands {
             for hand in HandSide.allCases {
                 XCTAssertFalse(ExerciseLibrary.exercises(in: category, hand: hand).isEmpty, "\(category) \(hand)")
             }
         }
+        XCTAssertFalse(ExerciseLibrary.exercises(in: .bothHands).isEmpty, "the hands-together category is not empty")
     }
 
     func testEveryExerciseTurnsIntoAValidLesson() {
@@ -24,7 +25,9 @@ final class ExerciseLibraryTests: XCTestCase {
             XCTAssertEqual(lesson.hand, exercise.hand)
             XCTAssertTrue(lesson.notes.allSatisfy { (1...5).contains($0.assignedFinger) }, exercise.id)
             XCTAssertTrue(lesson.notes.allSatisfy { (21...108).contains($0.noteNumber) }, exercise.id)
-            XCTAssertTrue(zip(lesson.notes, lesson.notes.dropFirst()).allSatisfy { $0.timestamp < $1.timestamp }, "\(exercise.id) in order")
+            // One hand plays one note after another; hands together share start times (never going backwards).
+            XCTAssertTrue(zip(lesson.notes, lesson.notes.dropFirst()).allSatisfy { exercise.bothHands ? $0.timestamp <= $1.timestamp : $0.timestamp < $1.timestamp }, "\(exercise.id) in order")
+            XCTAssertEqual(lesson.isBothHands, exercise.bothHands, exercise.id)
             XCTAssertLessThan(lesson.duration, 40, "\(exercise.id) should be short")
         }
     }
@@ -74,7 +77,7 @@ final class ExerciseLibraryTests: XCTestCase {
     // MARK: E3 — registers and positions
 
     func testRightHandIsAboveAndLeftHandBelowMiddleC() {
-        for exercise in ExerciseLibrary.all {
+        for exercise in ExerciseLibrary.all where !exercise.bothHands {   // hands-together exercises are checked per note in BothHandsTests
             let top = pitches(exercise).max()!, bottom = pitches(exercise).min()!
             switch exercise.hand {
             case .right: XCTAssertGreaterThanOrEqual(bottom, 60, exercise.id)

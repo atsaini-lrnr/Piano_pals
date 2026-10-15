@@ -121,12 +121,13 @@ final class KeyboardRemoteTests: XCTestCase {
         XCTAssertEqual(app.session.noteProgress, [.pending, .pending])
     }
 
-    func testOnScreenKeysDoNotStartTheSong() async throws {
+    func testAKeyTappedOnTheScreenStartsTheSongToo() async throws {
         let app = try makeApp()
         app.open(lesson("A"))
-        app.midi.injectOnScreen(note: 60, isOn: true)
-        try? await Task.sleep(for: .milliseconds(300))
-        XCTAssertEqual(app.session.phase, .ready)
+        app.midi.injectOnScreen(note: 60, isOn: true)          // the on-screen piano at the bottom of the lesson
+        await wait { app.session.phase == .playing }
+        XCTAssertEqual(app.session.phase, .playing)
+        XCTAssertEqual(app.session.noteProgress, [.pending, .pending], "that first tap is not a note either")
     }
 
     func testFinishingAsksByVoiceAndAKeyPlaysItAgain() async throws {
